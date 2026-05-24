@@ -44,31 +44,93 @@ def normalize_symbol(raw_symbol: str) -> str:
   if symbol.endswith(".SH"):
     return symbol[:-3] + ".SS"
 
+  if re.fullmatch(r"\d{6}\.(SS|SZ)", symbol):
+    return symbol
+
   return symbol
 
 
-def read_recommendations(csv_path: Path) -> list[Recommendation]:
+def validate_symbol(raw_symbol: str) -> str:
+  normalized = normalize_symbol(raw_symbol)
+  if re.fullmatch(r"\d{6}\.(SS|SZ)", normalized):
+    return normalized
+  raise ValueError("Invalid A-share symbol format")
+
+
+def read_recommendations(csv_path: Path) -> tuple[list[Recommendation], list[dict]]:
   recommendations: list[Recommendation] = []
+  failures: list[dict] = []
 
   with csv_path.open("r", encoding="utf-8") as fh:
     reader = csv.DictReader(fh)
-    for row in reader:
+    for row_number, row in enumerate(reader, start=2):
       symbol = (row.get("symbol") or "").strip()
+      name = (row.get("name") or "").strip()
       recommend_date = (row.get("recommend_date") or "").strip()
-      if not symbol or not recommend_date:
+      note = (row.get("note") or "").strip()
+
+      if not any([symbol, name, recommend_date, note]):
+        continue
+
+      if not symbol:
+        failures.append(
+          {
+            "symbol": "",
+            "name": name,
+            "recommend_date": recommend_date or "",
+            "error": f"CSV 第 {row_number} 行缺少 symbol",
+          }
+        )
+        continue
+
+      if not recommend_date:
+        failures.append(
+          {
+            "symbol": symbol,
+            "name": name,
+            "recommend_date": "",
+            "error": f"CSV 第 {row_number} 行缺少 recommend_date",
+          }
+        )
+        continue
+
+      try:
+        parsed_date = dt.date.fromisoformat(recommend_date)
+      except ValueError:
+        failures.append(
+          {
+            "symbol": symbol,
+            "name": name,
+            "recommend_date": recommend_date,
+            "error": f"CSV 第 {row_number} 行日期格式错误，要求 YYYY-MM-DD",
+          }
+        )
+        continue
+
+      try:
+        query_symbol = validate_symbol(symbol)
+      except ValueError as exc:
+        failures.append(
+          {
+            "symbol": symbol,
+            "name": name,
+            "recommend_date": recommend_date,
+            "error": f"CSV 第 {row_number} 行代码格式错误：{exc}",
+          }
+        )
         continue
 
       recommendations.append(
         Recommendation(
           symbol=symbol,
-          query_symbol=normalize_symbol(symbol),
-          name=(row.get("name") or "").strip(),
-          recommend_date=dt.date.fromisoformat(recommend_date),
-          note=(row.get("note") or "").strip(),
+          query_symbol=query_symbol,
+          name=name,
+          recommend_date=parsed_date,
+          note=note,
         )
       )
 
-  return recommendations
+  return recommendations, failures
 
 
 def yahoo_history(symbol: str, start_date: dt.date, end_date: dt.date) -> list[dict]:
@@ -232,11 +294,10 @@ def main() -> int:
 
   input_path = Path(args.input)
   output_path = Path(args.output)
-  recommendations = read_recommendations(input_path)
+  recommendations, failures = read_recommendations(input_path)
   output_path.parent.mkdir(parents=True, exist_ok=True)
 
   records = []
-  failures = []
   today = dt.date.today()
 
   for rec in recommendations:

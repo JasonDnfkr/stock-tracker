@@ -140,15 +140,19 @@ function renderFailures(failures) {
 
   failuresPanel.classList.remove("hidden");
   failuresList.innerHTML = failures
-    .map(
-      (failure) => `
+    .map((failure) => {
+      const title = [failure.symbol || "未填写代码", failure.name || ""]
+        .filter(Boolean)
+        .join(" · ");
+
+      return `
         <article class="failure-item">
-          <p class="failure-title">${failure.symbol} ${failure.name ? `· ${failure.name}` : ""}</p>
+          <p class="failure-title">${title}</p>
           <p class="failure-detail">推荐日期：${failure.recommend_date}</p>
           <p class="failure-detail">失败原因：${failure.error}</p>
         </article>
-      `,
-    )
+      `;
+    })
     .join("");
 }
 
