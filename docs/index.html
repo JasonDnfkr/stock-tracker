@@ -43,8 +43,8 @@
         <section class="panel">
           <div class="section-head">
             <div>
-              <p class="section-kicker">推荐清单</p>
-              <h2>单票表现</h2>
+              <p class="section-kicker">推荐事件</p>
+              <h2>每次推荐单独记一条</h2>
             </div>
             <label class="search-box">
               <span>搜索</span>
@@ -55,7 +55,9 @@
             <table>
               <thead>
                 <tr>
+                  <th>事件 ID</th>
                   <th>股票</th>
+                  <th>第几次推荐</th>
                   <th>推荐日期</th>
                   <th>当天价格</th>
                   <th>当前价</th>
@@ -72,6 +74,35 @@
           </div>
           <div class="empty-state hidden" id="empty-state">
             没有匹配的数据。
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="section-head">
+            <div>
+              <p class="section-kicker">股票汇总</p>
+              <h2>按股票聚合观察</h2>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>股票</th>
+                  <th>推荐次数</th>
+                  <th>盈利次数</th>
+                  <th>胜率</th>
+                  <th>平均收益率</th>
+                  <th>最近一次收益</th>
+                  <th>首次推荐</th>
+                  <th>最近推荐</th>
+                </tr>
+              </thead>
+              <tbody id="summary-body"></tbody>
+            </table>
+          </div>
+          <div class="empty-state hidden" id="summary-empty-state">
+            没有匹配的汇总数据。
           </div>
         </section>
 
@@ -99,7 +130,7 @@
             </div>
             <div class="step">
               <span>2</span>
-              <p>新增一行：<code>symbol,name,recommend_date,note</code>，`symbol` 直接填 6 位代码。</p>
+              <p>新增一行：<code>id,symbol,name,recommend_date,note</code>，同一股票多次推荐时每次都保留单独一行。</p>
             </div>
             <div class="step">
               <span>3</span>

@@ -14,6 +14,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -23,6 +24,7 @@ YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
 
 @dataclass
 class Recommendation:
+    id: str
     symbol: str
     query_symbol: str
     name: str
@@ -57,24 +59,42 @@ def validate_symbol(raw_symbol: str) -> str:
   raise ValueError("Invalid A-share symbol format")
 
 
+def sanitize_id(raw_id: str) -> str:
+  value = raw_id.strip()
+  if not value:
+    raise ValueError("Empty id")
+  if not re.fullmatch(r"[A-Za-z0-9._-]+", value):
+    raise ValueError("id 只能包含字母、数字、点、下划线、中划线")
+  return value
+
+
+def generate_recommendation_id(symbol: str, recommend_date: str, row_number: int) -> str:
+  compact_symbol = re.sub(r"[^A-Za-z0-9]+", "", symbol.upper()) or "UNKNOWN"
+  compact_date = re.sub(r"[^0-9]+", "", recommend_date) or "00000000"
+  return f"{compact_date}-{compact_symbol}-{row_number}"
+
+
 def read_recommendations(csv_path: Path) -> tuple[list[Recommendation], list[dict]]:
   recommendations: list[Recommendation] = []
   failures: list[dict] = []
+  seen_ids: set[str] = set()
 
   with csv_path.open("r", encoding="utf-8") as fh:
     reader = csv.DictReader(fh)
     for row_number, row in enumerate(reader, start=2):
+      raw_id = (row.get("id") or "").strip()
       symbol = (row.get("symbol") or "").strip()
       name = (row.get("name") or "").strip()
       recommend_date = (row.get("recommend_date") or "").strip()
       note = (row.get("note") or "").strip()
 
-      if not any([symbol, name, recommend_date, note]):
+      if not any([raw_id, symbol, name, recommend_date, note]):
         continue
 
       if not symbol:
         failures.append(
           {
+            "id": raw_id or generate_recommendation_id(symbol, recommend_date, row_number),
             "symbol": "",
             "name": name,
             "recommend_date": recommend_date or "",
@@ -86,6 +106,7 @@ def read_recommendations(csv_path: Path) -> tuple[list[Recommendation], list[dic
       if not recommend_date:
         failures.append(
           {
+            "id": raw_id or generate_recommendation_id(symbol, recommend_date, row_number),
             "symbol": symbol,
             "name": name,
             "recommend_date": "",
@@ -99,6 +120,7 @@ def read_recommendations(csv_path: Path) -> tuple[list[Recommendation], list[dic
       except ValueError:
         failures.append(
           {
+            "id": raw_id or generate_recommendation_id(symbol, recommend_date, row_number),
             "symbol": symbol,
             "name": name,
             "recommend_date": recommend_date,
@@ -112,6 +134,7 @@ def read_recommendations(csv_path: Path) -> tuple[list[Recommendation], list[dic
       except ValueError as exc:
         failures.append(
           {
+            "id": raw_id or generate_recommendation_id(symbol, recommend_date, row_number),
             "symbol": symbol,
             "name": name,
             "recommend_date": recommend_date,
@@ -120,8 +143,37 @@ def read_recommendations(csv_path: Path) -> tuple[list[Recommendation], list[dic
         )
         continue
 
+      recommendation_id = raw_id or generate_recommendation_id(symbol, recommend_date, row_number)
+      try:
+        recommendation_id = sanitize_id(recommendation_id)
+      except ValueError as exc:
+        failures.append(
+          {
+            "id": raw_id or recommendation_id,
+            "symbol": symbol,
+            "name": name,
+            "recommend_date": recommend_date,
+            "error": f"CSV 第 {row_number} 行 id 格式错误：{exc}",
+          }
+        )
+        continue
+
+      if recommendation_id in seen_ids:
+        failures.append(
+          {
+            "id": recommendation_id,
+            "symbol": symbol,
+            "name": name,
+            "recommend_date": recommend_date,
+            "error": f"CSV 第 {row_number} 行 id 重复：{recommendation_id}",
+          }
+        )
+        continue
+      seen_ids.add(recommendation_id)
+
       recommendations.append(
         Recommendation(
+          id=recommendation_id,
           symbol=symbol,
           query_symbol=query_symbol,
           name=name,
@@ -239,6 +291,7 @@ def compute_record(rec: Recommendation, bars: list[dict]) -> dict:
   max_drawdown = calculate_max_drawdown(closes_since_entry)
 
   return {
+    "id": rec.id,
     "symbol": rec.symbol,
     "query_symbol": rec.query_symbol,
     "name": rec.name,
@@ -257,6 +310,52 @@ def compute_record(rec: Recommendation, bars: list[dict]) -> dict:
   }
 
 
+def annotate_recommendation_sequences(records: list[dict]) -> list[dict]:
+  grouped: dict[str, list[dict]] = defaultdict(list)
+  for record in records:
+    grouped[record["symbol"]].append(record)
+
+  for symbol_records in grouped.values():
+    symbol_records.sort(key=lambda item: (item["recommend_date"], item["id"]))
+    total = len(symbol_records)
+    for index, record in enumerate(symbol_records, start=1):
+      record["recommendation_sequence"] = index
+      record["recommendation_count_for_symbol"] = total
+
+  return records
+
+
+def build_stock_summaries(records: list[dict]) -> list[dict]:
+  grouped: dict[str, list[dict]] = defaultdict(list)
+  for record in records:
+    grouped[record["symbol"]].append(record)
+
+  summaries = []
+  for symbol, symbol_records in grouped.items():
+    symbol_records.sort(key=lambda item: (item["recommend_date"], item["id"]))
+    profitable = sum(1 for item in symbol_records if item["is_profitable"])
+
+    summaries.append(
+      {
+        "symbol": symbol,
+        "name": symbol_records[-1]["name"],
+        "recommendation_count": len(symbol_records),
+        "profitable_count": profitable,
+        "win_rate": round(profitable / len(symbol_records), 6),
+        "average_return": average([item["return_rate"] for item in symbol_records]),
+        "latest_return": symbol_records[-1]["return_rate"],
+        "first_recommend_date": symbol_records[0]["recommend_date"],
+        "latest_recommend_date": symbol_records[-1]["recommend_date"],
+      }
+    )
+
+  summaries.sort(
+    key=lambda item: (item["latest_recommend_date"], item["symbol"]),
+    reverse=True,
+  )
+  return summaries
+
+
 def average(values: list[float | None]) -> float | None:
   valid = [value for value in values if value is not None and not math.isnan(value)]
   if not valid:
@@ -270,6 +369,7 @@ def build_summary(records: list[dict]) -> dict:
 
   return {
     "total_picks": total,
+    "unique_symbols": len({record["symbol"] for record in records}),
     "profitable_picks": profitable,
     "win_rate": round(profitable / total, 6) if total else None,
     "average_return": average([record.get("return_rate") for record in records]),
@@ -311,6 +411,7 @@ def main() -> int:
     except (urllib.error.URLError, RuntimeError, ValueError) as exc:
       failures.append(
         {
+          "id": rec.id,
           "symbol": rec.symbol,
           "query_symbol": rec.query_symbol,
           "name": rec.name,
@@ -319,11 +420,14 @@ def main() -> int:
         }
       )
 
+  annotate_recommendation_sequences(records)
   records.sort(key=lambda item: item["recommend_date"], reverse=True)
+  stock_summaries = build_stock_summaries(records)
   payload = {
     "generated_at": dt.datetime.now(dt.timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M:%S %Z"),
     "summary": build_summary(records),
     "records": records,
+    "stock_summaries": stock_summaries,
     "failures": failures,
   }
 

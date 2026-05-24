@@ -221,10 +221,25 @@ th {
   font-weight: 600;
 }
 
+.event-row.repeat-group {
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--group-accent) 10%, transparent), transparent 18%);
+}
+
+.event-row.repeat-group td:first-child {
+  box-shadow: inset 4px 0 0 var(--group-accent);
+}
+
 .stock-cell {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.id-cell {
+  font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+  font-size: 0.82rem;
+  color: var(--muted);
 }
 
 .stock-symbol {
@@ -236,6 +251,26 @@ th {
   font-size: 0.92rem;
 }
 
+.stock-meta {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.repeat-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--group-accent);
+  background: color-mix(in srgb, var(--group-accent) 12%, white);
+  border: 1px solid color-mix(in srgb, var(--group-accent) 22%, transparent);
+}
+
 .price-cell {
   display: flex;
   flex-direction: column;
@@ -245,6 +280,19 @@ th {
 .cell-note {
   color: var(--muted);
   font-size: 0.82rem;
+}
+
+.sequence-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 76px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .pill {
