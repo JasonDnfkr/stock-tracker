@@ -22,6 +22,10 @@ from pathlib import Path
 YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
 
 
+class PendingTrackingError(RuntimeError):
+  """Raised when a recommendation exists but cannot be priced yet."""
+
+
 @dataclass
 class Recommendation:
     id: str
@@ -253,25 +257,28 @@ def first_index_on_or_after(bars: list[dict], target_date: dt.date) -> int | Non
   return None
 
 
-def calculate_max_drawdown(closes: list[float]) -> float | None:
+def calculate_max_drawdown(closes: list[float]) -> tuple[float | None, float | None]:
   if not closes:
-    return None
+    return None, None
 
   peak = closes[0]
   max_drawdown = 0.0
+  trough_price = closes[0]
 
   for close in closes:
     peak = max(peak, close)
     drawdown = close / peak - 1
-    max_drawdown = min(max_drawdown, drawdown)
+    if drawdown < max_drawdown:
+      max_drawdown = drawdown
+      trough_price = close
 
-  return max_drawdown
+  return max_drawdown, trough_price
 
 
 def compute_record(rec: Recommendation, bars: list[dict]) -> dict:
   entry_index = first_index_on_or_after(bars, rec.recommend_date)
   if entry_index is None:
-    raise RuntimeError("No trading day found on or after recommend_date")
+    raise PendingTrackingError("推荐日期之后暂无可用交易数据，等待下一个交易日")
 
   entry_bar = bars[entry_index]
   entry_price = float(entry_bar["close"])
@@ -285,10 +292,13 @@ def compute_record(rec: Recommendation, bars: list[dict]) -> dict:
   bar_20d = bars[entry_index + 20] if entry_index + 20 < len(bars) else None
 
   return_rate = current_price / entry_price - 1
-  return_5d = (float(bar_5d["close"]) / entry_price - 1) if bar_5d else None
-  return_20d = (float(bar_20d["close"]) / entry_price - 1) if bar_20d else None
-  max_gain = max(highs_since_entry) / entry_price - 1 if highs_since_entry else None
-  max_drawdown = calculate_max_drawdown(closes_since_entry)
+  return_5d_price = float(bar_5d["close"]) if bar_5d else None
+  return_20d_price = float(bar_20d["close"]) if bar_20d else None
+  return_5d = (return_5d_price / entry_price - 1) if return_5d_price is not None else None
+  return_20d = (return_20d_price / entry_price - 1) if return_20d_price is not None else None
+  max_gain_price = max(highs_since_entry) if highs_since_entry else None
+  max_gain = max_gain_price / entry_price - 1 if max_gain_price is not None else None
+  max_drawdown, max_drawdown_price = calculate_max_drawdown(closes_since_entry)
 
   return {
     "id": rec.id,
@@ -302,9 +312,13 @@ def compute_record(rec: Recommendation, bars: list[dict]) -> dict:
     "current_price": round(current_price, 4),
     "return_rate": round(return_rate, 6),
     "return_5d": round(return_5d, 6) if return_5d is not None else None,
+    "return_5d_price": round(return_5d_price, 4) if return_5d_price is not None else None,
     "return_20d": round(return_20d, 6) if return_20d is not None else None,
+    "return_20d_price": round(return_20d_price, 4) if return_20d_price is not None else None,
     "max_gain": round(max_gain, 6) if max_gain is not None else None,
+    "max_gain_price": round(max_gain_price, 4) if max_gain_price is not None else None,
     "max_drawdown": round(max_drawdown, 6) if max_drawdown is not None else None,
+    "max_drawdown_price": round(max_drawdown_price, 4) if max_drawdown_price is not None else None,
     "is_profitable": return_rate > 0,
     "current_date": current_bar["date"].isoformat(),
   }
@@ -399,6 +413,7 @@ def main() -> int:
 
   records = []
   today = dt.date.today()
+  pending_records = []
 
   for rec in recommendations:
     try:
@@ -408,6 +423,18 @@ def main() -> int:
         raise RuntimeError("No market data returned")
       records.append(compute_record(rec, bars))
       time.sleep(0.4)
+    except PendingTrackingError as exc:
+      pending_records.append(
+        {
+          "id": rec.id,
+          "symbol": rec.symbol,
+          "query_symbol": rec.query_symbol,
+          "name": rec.name,
+          "recommend_date": rec.recommend_date.isoformat(),
+          "status": "pending_tracking",
+          "message": str(exc),
+        }
+      )
     except (urllib.error.URLError, RuntimeError, ValueError) as exc:
       failures.append(
         {
@@ -428,6 +455,7 @@ def main() -> int:
     "summary": build_summary(records),
     "records": records,
     "stock_summaries": stock_summaries,
+    "pending_records": pending_records,
     "failures": failures,
   }
 

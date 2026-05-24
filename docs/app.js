@@ -5,6 +5,8 @@ const updatedAt = document.getElementById("updated-at");
 const searchInput = document.getElementById("search-input");
 const emptyState = document.getElementById("empty-state");
 const groupedEmptyState = document.getElementById("grouped-empty-state");
+const pendingPanel = document.getElementById("pending-panel");
+const pendingList = document.getElementById("pending-list");
 const failuresPanel = document.getElementById("failures-panel");
 const failuresList = document.getElementById("failures-list");
 const groupedView = document.getElementById("grouped-view");
@@ -13,8 +15,8 @@ const groupedViewBtn = document.getElementById("grouped-view-btn");
 const eventViewBtn = document.getElementById("event-view-btn");
 
 let allRecords = [];
-let allStockSummaries = [];
 let currentView = "grouped";
+const expandedGroups = new Set();
 
 const percent = new Intl.NumberFormat("zh-CN", {
   style: "percent",
@@ -58,6 +60,26 @@ function formatNumber(value) {
   return number.format(value);
 }
 
+function renderMetricWithPrice(rate, price) {
+  const toneClass = metricClass(rate);
+  return `
+    <div class="price-cell">
+      <span class="${toneClass}">${formatSignedPercent(rate)}</span>
+      ${price === null || price === undefined ? "" : `<span class="cell-note ${toneClass}">${formatNumber(price)}</span>`}
+    </div>
+  `;
+}
+
+function renderPriceWithMetric(price, rate) {
+  const toneClass = metricClass(rate);
+  return `
+    <div class="price-cell">
+      <span class="${toneClass}">${formatNumber(price)}</span>
+      <span class="cell-note ${toneClass}">${formatSignedPercent(rate)}</span>
+    </div>
+  `;
+}
+
 function metricClass(value) {
   if (value === null || value === undefined) {
     return "neutral-text";
@@ -71,43 +93,22 @@ function metricClass(value) {
   return "neutral-text";
 }
 
-function groupAccent(symbol) {
-  let hash = 0;
-  for (const char of symbol) {
-    hash = (hash * 31 + char.charCodeAt(0)) % 360;
-  }
-  return `hsl(${hash} 70% 45%)`;
-}
-
-function winRateClass(value) {
-  if (value === null || value === undefined) {
-    return "neutral-text";
-  }
-  if (value > 0.5) {
-    return "profit-text";
-  }
-  if (value < 0.5) {
-    return "loss-text";
-  }
-  return "neutral-text";
-}
-
 function renderSummary(summary) {
   const cards = [
-    ["推荐总数", summary.total_picks],
-    ["覆盖股票数", summary.unique_symbols],
-    ["当前盈利数", summary.profitable_picks],
-    ["当前胜率", formatPercent(summary.win_rate)],
-    ["平均收益率", formatSignedPercent(summary.average_return)],
-    ["平均 5 日收益", formatSignedPercent(summary.average_return_5d)],
+    ["推荐总数", summary.total_picks, ""],
+    ["覆盖股票数", summary.unique_symbols, ""],
+    ["当前盈利数", summary.profitable_picks, ""],
+    ["当前胜率", formatPercent(summary.win_rate), ""],
+    ["平均收益率", formatSignedPercent(summary.average_return), metricClass(summary.average_return)],
+    ["平均 5 日收益", formatSignedPercent(summary.average_return_5d), metricClass(summary.average_return_5d)],
   ];
 
   summaryGrid.innerHTML = cards
     .map(
-      ([label, value]) => `
+      ([label, value, valueClass]) => `
         <article class="metric-card">
           <p class="metric-label">${label}</p>
-          <p class="metric-value">${value ?? "--"}</p>
+          <p class="metric-value ${valueClass}">${value ?? "--"}</p>
         </article>
       `,
     )
@@ -135,31 +136,87 @@ function stockSummaryMap(records) {
   return grouped;
 }
 
-function renderGroupedView(summaries, records) {
-  if (!summaries.length) {
+function buildGroupedStocks(records) {
+  const grouped = stockSummaryMap(records);
+  const groups = [];
+
+  for (const [symbol, symbolRecords] of grouped.entries()) {
+    const latestRecord = [...symbolRecords].sort((a, b) => b.recommend_date.localeCompare(a.recommend_date))[0];
+    groups.push({
+      symbol,
+      name: latestRecord?.name || "--",
+      records: symbolRecords,
+      recommendation_count: symbolRecords.length,
+      latest_recommend_date: latestRecord?.recommend_date || "",
+    });
+  }
+
+  groups.sort((a, b) => {
+    if (b.recommendation_count !== a.recommendation_count) {
+      return b.recommendation_count - a.recommendation_count;
+    }
+    if (b.latest_recommend_date !== a.latest_recommend_date) {
+      return b.latest_recommend_date.localeCompare(a.latest_recommend_date);
+    }
+    return a.symbol.localeCompare(b.symbol);
+  });
+
+  return groups;
+}
+
+function renderGroupedView(records) {
+  const groups = buildGroupedStocks(records);
+
+  if (!groups.length) {
     stockGroupList.innerHTML = "";
     groupedEmptyState.classList.remove("hidden");
     return;
   }
 
   groupedEmptyState.classList.add("hidden");
-  const recordsBySymbol = stockSummaryMap(records);
 
-  stockGroupList.innerHTML = summaries
-    .map((summary) => {
-      const groupColor = groupAccent(summary.symbol);
-      const events = recordsBySymbol.get(summary.symbol) || [];
-      const shouldOpen = summary.recommendation_count > 1;
+  stockGroupList.innerHTML = groups
+    .map((group) => {
+      const events = group.records;
 
       const eventRows = events
-        .map((record) => {
+        .map((record, index) => {
           const profitClass = record.is_profitable ? "profit" : "loss";
           const profitLabel = record.is_profitable ? "盈利" : "亏损";
+          const isGroupStart = index === 0;
+          const isExpanded = expandedGroups.has(group.symbol);
+          const rowStateClass = isGroupStart
+            ? "group-start-row"
+            : isExpanded
+              ? "group-follow-row"
+              : "group-follow-row hidden";
+          const stockCell = isGroupStart
+            ? `
+                <div class="stock-cell compact">
+                  <span class="stock-symbol">${record.symbol}</span>
+                  <span class="stock-name" title="事件 ID：${record.id}">${record.name || "--"}</span>
+                  ${
+                    group.recommendation_count > 1
+                      ? `
+                        <button
+                          class="group-toggle-btn"
+                          type="button"
+                          data-group-symbol="${group.symbol}"
+                          aria-expanded="${isExpanded ? "true" : "false"}"
+                        >
+                          ${isExpanded ? "收起" : `展开其余 ${group.recommendation_count - 1} 条`}
+                        </button>
+                      `
+                      : ""
+                  }
+                </div>
+              `
+            : `<span class="group-placeholder"></span>`;
 
           return `
-            <tr>
-              <td><span class="sequence-badge" title="事件 ID：${record.id}">第 ${record.recommendation_sequence} 次</span></td>
-              <td>${record.recommend_date}</td>
+            <tr class="group-event-row ${rowStateClass}">
+              <td>${stockCell}</td>
+              <td title="事件 ID：${record.id}">${record.recommend_date}</td>
               <td>
                 <div class="price-cell">
                   <span>${formatNumber(record.entry_price)}</span>
@@ -170,75 +227,18 @@ function renderGroupedView(summaries, records) {
                   }
                 </div>
               </td>
-              <td>${formatNumber(record.current_price)}</td>
-              <td class="${metricClass(record.return_rate)}">${formatSignedPercent(record.return_rate)}</td>
-              <td class="${metricClass(record.return_5d)}">${formatSignedPercent(record.return_5d)}</td>
-              <td class="${metricClass(record.return_20d)}">${formatSignedPercent(record.return_20d)}</td>
-              <td class="${metricClass(record.max_gain)}">${formatSignedPercent(record.max_gain)}</td>
-              <td class="${metricClass(record.max_drawdown)}">${formatSignedPercent(record.max_drawdown)}</td>
+              <td>${renderPriceWithMetric(record.current_price, record.return_rate)}</td>
+              <td>${renderMetricWithPrice(record.return_5d, record.return_5d_price)}</td>
+              <td>${renderMetricWithPrice(record.return_20d, record.return_20d_price)}</td>
+              <td>${renderMetricWithPrice(record.max_gain, record.max_gain_price)}</td>
+              <td>${renderMetricWithPrice(record.max_drawdown, record.max_drawdown_price)}</td>
               <td><span class="pill ${profitClass}">${profitLabel}</span></td>
             </tr>
           `;
         })
         .join("");
 
-      return `
-        <details class="stock-group-card" style="--group-accent: ${groupColor}" ${shouldOpen ? "open" : ""}>
-          <summary class="stock-group-summary">
-            <div class="group-main">
-              <div class="group-title">
-                <span class="group-symbol">${summary.symbol}</span>
-                <span class="group-name">${summary.name || "--"}</span>
-                <span class="repeat-badge">共 ${summary.recommendation_count} 次</span>
-              </div>
-              <div class="group-subtitle">
-                <span>首次推荐 ${summary.first_recommend_date}</span>
-                <span>最近推荐 ${summary.latest_recommend_date}</span>
-              </div>
-            </div>
-            <div class="group-metrics">
-              <div class="group-metric">
-                <span class="group-metric-label">盈利次数</span>
-                <span class="group-metric-value">${summary.profitable_count}/${summary.recommendation_count}</span>
-              </div>
-              <div class="group-metric">
-                <span class="group-metric-label">胜率</span>
-                <span class="group-metric-value ${winRateClass(summary.win_rate)}">${formatPercent(summary.win_rate)}</span>
-              </div>
-              <div class="group-metric">
-                <span class="group-metric-label">平均收益</span>
-                <span class="group-metric-value ${metricClass(summary.average_return)}">${formatSignedPercent(summary.average_return)}</span>
-              </div>
-              <div class="group-metric">
-                <span class="group-metric-label">最近一次</span>
-                <span class="group-metric-value ${metricClass(summary.latest_return)}">${formatSignedPercent(summary.latest_return)}</span>
-              </div>
-            </div>
-          </summary>
-          <div class="group-detail">
-            <div class="detail-note">展开后按时间线查看该股票的全部推荐事件，鼠标悬浮“第几次推荐”徽标可查看事件 ID。</div>
-            <div class="table-wrap">
-              <table class="nested-table">
-                <thead>
-                  <tr>
-                    <th>推荐次序</th>
-                    <th>推荐日期</th>
-                    <th>当天价格</th>
-                    <th>当前价</th>
-                    <th>收益率</th>
-                    <th>5日收益</th>
-                    <th>20日收益</th>
-                    <th>最大涨幅</th>
-                    <th>最大回撤</th>
-                    <th>是否盈利</th>
-                  </tr>
-                </thead>
-                <tbody>${eventRows}</tbody>
-              </table>
-            </div>
-          </div>
-        </details>
-      `;
+      return eventRows;
     })
     .join("");
 }
@@ -256,29 +256,23 @@ function renderTable(records) {
     .map((record) => {
       const profitClass = record.is_profitable ? "profit" : "loss";
       const profitLabel = record.is_profitable ? "盈利" : "亏损";
-      const hasRepeat = record.recommendation_count_for_symbol > 1;
-      const rowClass = hasRepeat ? "event-row repeat-group" : "event-row";
-      const rowStyle = hasRepeat ? `style="--group-accent: ${groupAccent(record.symbol)}"` : "";
 
       return `
-        <tr class="${rowClass}" ${rowStyle}>
+        <tr class="event-row">
           <td>
             <div class="stock-cell">
               <span class="stock-symbol">${record.symbol}</span>
               <div class="stock-meta">
                 <span class="stock-name" title="事件 ID：${record.id}">${record.name || "--"}</span>
                 ${
-                  hasRepeat
+                  record.recommendation_count_for_symbol > 1
                     ? `<span class="repeat-badge">共 ${record.recommendation_count_for_symbol} 次</span>`
                     : ""
                 }
               </div>
             </div>
           </td>
-          <td>
-            <span class="sequence-badge" title="事件 ID：${record.id}">第 ${record.recommendation_sequence} 次</span>
-          </td>
-          <td>${record.recommend_date}</td>
+          <td title="事件 ID：${record.id}">${record.recommend_date}</td>
           <td>
             <div class="price-cell">
               <span>${formatNumber(record.entry_price)}</span>
@@ -289,29 +283,16 @@ function renderTable(records) {
               }
             </div>
           </td>
-          <td>${formatNumber(record.current_price)}</td>
-          <td class="${metricClass(record.return_rate)}">${formatSignedPercent(record.return_rate)}</td>
-          <td class="${metricClass(record.return_5d)}">${formatSignedPercent(record.return_5d)}</td>
-          <td class="${metricClass(record.return_20d)}">${formatSignedPercent(record.return_20d)}</td>
-          <td class="${metricClass(record.max_gain)}">${formatSignedPercent(record.max_gain)}</td>
-          <td class="${metricClass(record.max_drawdown)}">${formatSignedPercent(record.max_drawdown)}</td>
+          <td>${renderPriceWithMetric(record.current_price, record.return_rate)}</td>
+          <td>${renderMetricWithPrice(record.return_5d, record.return_5d_price)}</td>
+          <td>${renderMetricWithPrice(record.return_20d, record.return_20d_price)}</td>
+          <td>${renderMetricWithPrice(record.max_gain, record.max_gain_price)}</td>
+          <td>${renderMetricWithPrice(record.max_drawdown, record.max_drawdown_price)}</td>
           <td><span class="pill ${profitClass}">${profitLabel}</span></td>
         </tr>
       `;
     })
     .join("");
-}
-
-function sortGroupedSummaries(summaries) {
-  return [...summaries].sort((a, b) => {
-    if (b.recommendation_count !== a.recommendation_count) {
-      return b.recommendation_count - a.recommendation_count;
-    }
-    if (b.latest_recommend_date !== a.latest_recommend_date) {
-      return b.latest_recommend_date.localeCompare(a.latest_recommend_date);
-    }
-    return a.symbol.localeCompare(b.symbol);
-  });
 }
 
 function syncViewButtons() {
@@ -321,10 +302,19 @@ function syncViewButtons() {
   eventViewBtn.classList.toggle("active", currentView === "event");
 }
 
-function renderFilteredViews(records, summaries) {
+function renderFilteredViews(records) {
   renderTable(records);
-  renderGroupedView(sortGroupedSummaries(summaries), records);
+  renderGroupedView(records);
   syncViewButtons();
+}
+
+function toggleGroup(symbol) {
+  if (expandedGroups.has(symbol)) {
+    expandedGroups.delete(symbol);
+  } else {
+    expandedGroups.add(symbol);
+  }
+  applyFilter();
 }
 
 function renderFailures(failures) {
@@ -353,10 +343,36 @@ function renderFailures(failures) {
     .join("");
 }
 
+function renderPendingRecords(records) {
+  if (!records.length) {
+    pendingPanel.classList.add("hidden");
+    pendingList.innerHTML = "";
+    return;
+  }
+
+  pendingPanel.classList.remove("hidden");
+  pendingList.innerHTML = records
+    .map((record) => {
+      const title = [record.symbol || "未填写代码", record.name || ""]
+        .filter(Boolean)
+        .join(" · ");
+
+      return `
+        <article class="pending-item">
+          <p class="failure-title">${title}</p>
+          <p class="failure-detail">事件 ID：${record.id || "--"}</p>
+          <p class="failure-detail">推荐日期：${record.recommend_date}</p>
+          <p class="failure-detail">当前状态：${record.message}</p>
+        </article>
+      `;
+    })
+    .join("");
+}
+
 function applyFilter() {
   const keyword = searchInput.value.trim().toLowerCase();
   if (!keyword) {
-    renderFilteredViews(allRecords, allStockSummaries);
+    renderFilteredViews(allRecords);
     return;
   }
 
@@ -367,14 +383,7 @@ function applyFilter() {
     );
   });
 
-  const filteredSummaries = allStockSummaries.filter((item) => {
-    return (
-      item.symbol.toLowerCase().includes(keyword) ||
-      (item.name || "").toLowerCase().includes(keyword)
-    );
-  });
-
-  renderFilteredViews(filtered, filteredSummaries);
+  renderFilteredViews(filtered);
 }
 
 async function loadData() {
@@ -386,14 +395,21 @@ async function loadData() {
 
   const data = await response.json();
   allRecords = data.records || [];
-  allStockSummaries = data.stock_summaries || [];
   renderSummary(data.summary || {});
-  renderFilteredViews(allRecords, allStockSummaries);
+  renderFilteredViews(allRecords);
+  renderPendingRecords(data.pending_records || []);
   renderFailures(data.failures || []);
   updatedAt.textContent = `最近更新：${data.generated_at || "--"}`;
 }
 
 searchInput.addEventListener("input", applyFilter);
+stockGroupList.addEventListener("click", (event) => {
+  const button = event.target.closest(".group-toggle-btn");
+  if (!button) {
+    return;
+  }
+  toggleGroup(button.dataset.groupSymbol || "");
+});
 groupedViewBtn.addEventListener("click", () => {
   currentView = "grouped";
   syncViewButtons();

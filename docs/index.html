@@ -8,7 +8,7 @@
   </head>
   <body>
     <div class="page-shell">
-      <header class="hero">
+      <header class="hero hidden">
         <div class="hero-copy">
           <p class="eyebrow">A-Share Tracker</p>
           <h1>A 股荐股胜率追踪</h1>
@@ -58,7 +58,24 @@
             </div>
           </div>
           <div id="grouped-view">
-            <div class="stock-group-list" id="stock-group-list"></div>
+            <div class="table-wrap">
+              <table class="grouped-table">
+                <thead>
+                  <tr>
+                    <th>股票</th>
+                    <th>推荐日期</th>
+                    <th>当天价格</th>
+                    <th>当前价 / 收益率</th>
+                    <th>5日收益</th>
+                    <th>20日收益</th>
+                    <th>最大涨幅</th>
+                    <th>最大回撤</th>
+                    <th>是否盈利</th>
+                  </tr>
+                </thead>
+                <tbody id="stock-group-list"></tbody>
+              </table>
+            </div>
             <div class="empty-state hidden" id="grouped-empty-state">
               没有匹配的股票分组。
             </div>
@@ -69,11 +86,9 @@
                 <thead>
                   <tr>
                     <th>股票</th>
-                    <th>第几次推荐</th>
                     <th>推荐日期</th>
                     <th>当天价格</th>
-                    <th>当前价</th>
-                    <th>收益率</th>
+                    <th>当前价 / 收益率</th>
                     <th>5日收益</th>
                     <th>20日收益</th>
                     <th>最大涨幅</th>
@@ -90,6 +105,16 @@
           </div>
         </section>
 
+        <section class="panel hidden" id="pending-panel">
+          <div class="section-head">
+            <div>
+              <p class="section-kicker">待跟踪</p>
+              <h2>尚未进入可计算区间</h2>
+            </div>
+          </div>
+          <div class="pending-list" id="pending-list"></div>
+        </section>
+
         <section class="panel hidden" id="failures-panel">
           <div class="section-head">
             <div>
@@ -100,7 +125,7 @@
           <div class="failure-list" id="failures-list"></div>
         </section>
 
-        <section class="panel">
+        <section class="panel hidden">
           <div class="section-head">
             <div>
               <p class="section-kicker">录入方式</p>

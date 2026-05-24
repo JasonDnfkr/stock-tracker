@@ -245,7 +245,7 @@ table {
 
 th,
 td {
-  padding: 14px 12px;
+  padding: 11px 10px;
   text-align: left;
   border-bottom: 1px solid rgba(110, 23, 33, 0.1);
   white-space: nowrap;
@@ -257,131 +257,58 @@ th {
   font-weight: 600;
 }
 
-.event-row.repeat-group {
-  background:
-    linear-gradient(90deg, color-mix(in srgb, var(--group-accent) 10%, transparent), transparent 18%);
+.group-event-row td:first-child {
+  padding-left: 18px;
 }
 
-.event-row.repeat-group td:first-child {
-  box-shadow: inset 4px 0 0 var(--group-accent);
+.group-start-row td {
+  border-top: 10px solid rgba(0, 0, 0, 0);
 }
 
-.stock-group-list {
-  display: grid;
-  gap: 16px;
+.group-follow-row td {
+  opacity: 0.75;
 }
 
-.stock-group-card {
-  border: 1px solid rgba(110, 23, 33, 0.1);
-  border-radius: 22px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.8), rgba(255, 252, 250, 0.92)),
-    linear-gradient(90deg, color-mix(in srgb, var(--group-accent) 12%, transparent), transparent 20%);
-  overflow: hidden;
+.group-placeholder {
+  display: inline-block;
+  width: 1px;
 }
 
-.stock-group-summary {
-  list-style: none;
-  display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(360px, 1fr);
-  gap: 16px;
-  align-items: center;
-  padding: 20px 22px;
-  cursor: pointer;
-  position: relative;
-}
-
-.stock-group-summary::-webkit-details-marker {
+.group-follow-row.hidden {
   display: none;
 }
 
-.stock-group-summary::after {
-  content: "展开";
-  position: absolute;
-  right: 24px;
-  top: 20px;
-  color: var(--muted);
-  font-size: 0.82rem;
-  font-weight: 700;
-}
-
-.stock-group-card[open] .stock-group-summary::after {
-  content: "收起";
-}
-
-.group-main {
-  display: grid;
-  gap: 10px;
-}
-
-.group-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
 .group-symbol {
-  font-size: 1.18rem;
+  font-size: 1.02rem;
   font-weight: 800;
 }
 
 .group-name {
   color: var(--muted);
-}
-
-.group-subtitle {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  color: var(--muted);
-  font-size: 0.88rem;
-}
-
-.group-metrics {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.group-metric {
-  padding: 12px 14px;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid rgba(110, 23, 33, 0.08);
-}
-
-.group-metric-label {
-  display: block;
-  color: var(--muted);
-  font-size: 0.8rem;
-}
-
-.group-metric-value {
-  display: block;
-  margin-top: 6px;
-  font-size: 1.02rem;
-  font-weight: 800;
-}
-
-.group-detail {
-  padding: 0 22px 18px;
-}
-
-.detail-note {
-  margin-bottom: 12px;
-  color: var(--muted);
-  font-size: 0.88rem;
-}
-
-.nested-table {
-  min-width: 920px;
+  font-size: 0.92rem;
 }
 
 .stock-cell {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.stock-cell.compact {
+  gap: 6px;
+}
+
+.group-toggle-btn {
+  border: 1px solid rgba(110, 23, 33, 0.1);
+  background: rgba(98, 19, 34, 0.04);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 3px 8px;
+  cursor: pointer;
 }
 
 .stock-symbol {
@@ -404,37 +331,23 @@ th {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 3px 8px;
+  padding: 2px 7px;
   border-radius: 999px;
   font-size: 0.76rem;
   font-weight: 700;
-  color: var(--group-accent);
-  background: color-mix(in srgb, var(--group-accent) 12%, white);
-  border: 1px solid color-mix(in srgb, var(--group-accent) 22%, transparent);
+  color: var(--muted);
+  background: rgba(98, 19, 34, 0.05);
+  border: 1px solid rgba(110, 23, 33, 0.1);
 }
 
 .price-cell {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
 
 .cell-note {
-  color: var(--muted);
   font-size: 0.82rem;
-}
-
-.sequence-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 76px;
-  padding: 6px 10px;
-  border-radius: 999px;
-  font-size: 0.82rem;
-  font-weight: 700;
-  color: var(--accent);
-  background: var(--accent-soft);
 }
 
 .pill {
@@ -504,6 +417,18 @@ th {
   gap: 12px;
 }
 
+.pending-list {
+  display: grid;
+  gap: 12px;
+}
+
+.pending-item {
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: rgba(33, 102, 172, 0.06);
+  border: 1px solid rgba(33, 102, 172, 0.16);
+}
+
 .failure-item {
   padding: 16px 18px;
   border-radius: 18px;
@@ -552,8 +477,4 @@ th {
     width: 100%;
   }
 
-  .stock-group-summary,
-  .group-metrics {
-    grid-template-columns: 1fr;
-  }
 }
