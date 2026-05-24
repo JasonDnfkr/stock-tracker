@@ -7,6 +7,7 @@ import csv
 import datetime as dt
 import json
 import math
+import re
 import statistics
 import sys
 import time
@@ -23,9 +24,27 @@ YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
 @dataclass
 class Recommendation:
     symbol: str
+    query_symbol: str
     name: str
     recommend_date: dt.date
     note: str
+
+
+def normalize_symbol(raw_symbol: str) -> str:
+  symbol = raw_symbol.strip().upper()
+  if not symbol:
+    raise ValueError("Empty symbol")
+
+  if re.fullmatch(r"\d{6}", symbol):
+    if symbol.startswith(("5", "6", "9")):
+      return f"{symbol}.SS"
+    if symbol.startswith(("0", "2", "3")):
+      return f"{symbol}.SZ"
+
+  if symbol.endswith(".SH"):
+    return symbol[:-3] + ".SS"
+
+  return symbol
 
 
 def read_recommendations(csv_path: Path) -> list[Recommendation]:
@@ -42,6 +61,7 @@ def read_recommendations(csv_path: Path) -> list[Recommendation]:
       recommendations.append(
         Recommendation(
           symbol=symbol,
+          query_symbol=normalize_symbol(symbol),
           name=(row.get("name") or "").strip(),
           recommend_date=dt.date.fromisoformat(recommend_date),
           note=(row.get("note") or "").strip(),
@@ -158,6 +178,7 @@ def compute_record(rec: Recommendation, bars: list[dict]) -> dict:
 
   return {
     "symbol": rec.symbol,
+    "query_symbol": rec.query_symbol,
     "name": rec.name,
     "note": rec.note,
     "recommend_date": rec.recommend_date.isoformat(),
@@ -221,7 +242,7 @@ def main() -> int:
   for rec in recommendations:
     try:
       start_date = rec.recommend_date - dt.timedelta(days=14)
-      bars = yahoo_history(rec.symbol, start_date=start_date, end_date=today)
+      bars = yahoo_history(rec.query_symbol, start_date=start_date, end_date=today)
       if not bars:
         raise RuntimeError("No market data returned")
       records.append(compute_record(rec, bars))
@@ -230,6 +251,7 @@ def main() -> int:
       failures.append(
         {
           "symbol": rec.symbol,
+          "query_symbol": rec.query_symbol,
           "name": rec.name,
           "recommend_date": rec.recommend_date.isoformat(),
           "error": str(exc),

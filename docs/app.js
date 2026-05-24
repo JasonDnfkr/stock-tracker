@@ -14,6 +14,13 @@ const percent = new Intl.NumberFormat("zh-CN", {
   maximumFractionDigits: 2,
 });
 
+const signedPercent = new Intl.NumberFormat("zh-CN", {
+  style: "percent",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+  signDisplay: "exceptZero",
+});
+
 const number = new Intl.NumberFormat("zh-CN", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
@@ -25,6 +32,14 @@ function formatPercent(value) {
   }
 
   return percent.format(value);
+}
+
+function formatSignedPercent(value) {
+  if (value === null || value === undefined) {
+    return "--";
+  }
+
+  return signedPercent.format(value);
 }
 
 function formatNumber(value) {
@@ -104,11 +119,11 @@ function renderTable(records) {
             </div>
           </td>
           <td>${formatNumber(record.current_price)}</td>
-          <td class="${metricClass(record.return_rate)}">${formatPercent(record.return_rate)}</td>
-          <td class="${metricClass(record.return_5d)}">${formatPercent(record.return_5d)}</td>
-          <td class="${metricClass(record.return_20d)}">${formatPercent(record.return_20d)}</td>
-          <td class="${metricClass(record.max_gain)}">${formatPercent(record.max_gain)}</td>
-          <td class="${metricClass(record.max_drawdown)}">${formatPercent(record.max_drawdown)}</td>
+          <td class="${metricClass(record.return_rate)}">${formatSignedPercent(record.return_rate)}</td>
+          <td class="${metricClass(record.return_5d)}">${formatSignedPercent(record.return_5d)}</td>
+          <td class="${metricClass(record.return_20d)}">${formatSignedPercent(record.return_20d)}</td>
+          <td class="${metricClass(record.max_gain)}">${formatSignedPercent(record.max_gain)}</td>
+          <td class="${metricClass(record.max_drawdown)}">${formatSignedPercent(record.max_drawdown)}</td>
           <td><span class="pill ${profitClass}">${profitLabel}</span></td>
         </tr>
       `;

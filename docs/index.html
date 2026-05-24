@@ -3,26 +3,27 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>荐股胜率追踪</title>
+    <title>A 股荐股胜率追踪</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <div class="page-shell">
       <header class="hero">
         <div class="hero-copy">
-          <p class="eyebrow">Stock Tracker</p>
-          <h1>荐股胜率追踪面板</h1>
+          <p class="eyebrow">A-Share Tracker</p>
+          <h1>A 股荐股胜率追踪</h1>
           <p class="hero-text">
-            用 GitHub Pages 展示结果，用 GitHub Actions 每天自动刷新数据。
-            你只需要维护推荐股票清单。
+            面向沪深市场的荐股观察面板。用 GitHub Pages 展示结果，
+            用 GitHub Actions 每天自动刷新数据。
           </p>
         </div>
         <div class="hero-card">
-          <p class="hero-card-label">当前模式</p>
-          <p class="hero-card-value">零服务器 / 静态部署</p>
+          <p class="hero-card-label">市场范围</p>
+          <p class="hero-card-value">沪深 A 股优先</p>
           <p class="hero-card-note">
-            数据源默认使用 Yahoo Finance 风格代码，例如
-            <code>AAPL</code>、<code>0700.HK</code>、<code>600519.SS</code>。
+            录入时可直接写 6 位 A 股代码，例如
+            <code>600519</code>、<code>000001</code>、<code>300750</code>。
+            系统会自动转换成数据源所需格式。
           </p>
         </div>
       </header>
@@ -88,7 +89,7 @@
           <div class="section-head">
             <div>
               <p class="section-kicker">录入方式</p>
-              <h2>如何新增推荐股票</h2>
+              <h2>如何新增 A 股推荐</h2>
             </div>
           </div>
           <div class="steps">
@@ -98,11 +99,11 @@
             </div>
             <div class="step">
               <span>2</span>
-              <p>新增一行：<code>symbol,name,recommend_date,note</code>。</p>
+              <p>新增一行：<code>symbol,name,recommend_date,note</code>，`symbol` 直接填 6 位代码。</p>
             </div>
             <div class="step">
               <span>3</span>
-              <p>推送到 GitHub 后，页面会自动重新抓价并更新。</p>
+              <p>推送到 GitHub 后，页面会自动重新抓取沪深 A 股数据并更新。</p>
             </div>
           </div>
         </section>
