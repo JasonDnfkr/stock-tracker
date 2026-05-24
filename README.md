@@ -1,127 +1,119 @@
-# A 股 Stock Tracker
+# A 股荐股追踪面板
 
-一个适合个人使用的“A 股荐股胜率追踪”小项目。
+这是一个不依赖自购服务器的静态小项目：
 
-特点：
+- 你维护推荐记录
+- `scripts/update_data.py` 抓取 A 股日线并计算指标
+- GitHub Actions 自动刷新 `docs/data/metrics.json`
+- GitHub Pages 直接展示网页
 
-- 不需要自购服务器
-- 网页直接部署到 GitHub Pages
-- GitHub Actions 每天自动刷新价格
-- 你只需要维护推荐股票列表
+项目的统计单位是“推荐事件”，不是“股票去重结果”。同一只股票可以在不同日期多次推荐，每次都会单独保留、单独计算。
 
-## 适合你的最小方案
+## 你平时怎么用
 
-如果你的核心诉求是“观察群主长期胜率”，最快的方式不是先做 AI Agent，而是：
+日常只需要做这几步：
 
-1. 手工录入每次推荐的股票和日期
-2. 由 GitHub Actions 每天自动抓取最新价格
-3. 在网页上展示胜率、收益率、5 日/20 日表现、最大涨幅、最大回撤
-4. 同一只股票多次推荐时，按“推荐事件”分别统计
+1. 本地新增或修改推荐记录
+2. 本地执行一次刷新，确认页面效果
+3. 提交并推送到 GitHub
+4. 等待 GitHub Actions 自动更新线上页面
 
-首版已经按这个思路实现。
-
-## 项目结构
-
-```text
-.
-├── .github/workflows/pages.yml       # 自动更新数据并部署 Pages
-├── docs/
-│   ├── index.html                    # 前端页面
-│   ├── app.js                        # 页面逻辑
-│   ├── styles.css                    # 页面样式
-│   └── data/
-│       ├── recommendations.csv       # 推荐事件列表
-│       └── metrics.json              # 自动生成的结果
-├── scripts/manage_recommendations.py # 本地录入/修改推荐记录
-└── scripts/update_data.py            # 抓价并计算指标
-```
-
-## 如何录入股票
-
-推荐你优先使用本地工具 [scripts/manage_recommendations.py](/data00/home/zehao.zhang/main/self/stock-tracker/scripts/manage_recommendations.py)，不要手工维护 `id`。
-
-常用命令：
+最省事的录入方式不是手改 CSV，而是用本地命令行工具：
 
 ```bash
-python3 scripts/manage_recommendations.py add --code 600519 --name 贵州茅台 --recommend-date 2026-05-25 --note 三次推荐
+python3 scripts/manage_recommendations.py add --code 600519 --name 贵州茅台 --recommend-date 2026-05-25 --note 首次推荐 --refresh
 python3 scripts/manage_recommendations.py list
-python3 scripts/manage_recommendations.py update --id 20260525-600519-1 --note 调整备注
-python3 scripts/manage_recommendations.py remove --id 20260525-600519-1
+python3 scripts/manage_recommendations.py update --id 20260525-600519-1 --note 二次观察 --refresh
+python3 scripts/manage_recommendations.py remove --id 20260525-600519-1 --refresh
 ```
 
-如果你希望录入后顺手刷新页面数据，可以加 `--refresh`：
+说明：
 
-```bash
-python3 scripts/manage_recommendations.py add --code 600519 --name 贵州茅台 --recommend-date 2026-05-25 --note 三次推荐 --refresh
-```
+- `--code` 是主要参数名，填 6 位 A 股代码即可
+- `--refresh` 会顺手执行一次 `scripts/update_data.py`
+- 工具会自动生成 `id`，你不需要手工维护
 
-工具会自动：
+## 数据文件
 
-- 生成唯一 `id`
-- 校验 A 股代码格式
-- 校验日期格式
-- 按日期和 `id` 重新写回 CSV
-
-底层写入的 [docs/data/recommendations.csv](/data00/home/zehao.zhang/main/self/stock-tracker/docs/data/recommendations.csv) 格式如下：
+推荐记录存放在 `docs/data/recommendations.csv`，字段如下：
 
 ```csv
 id,symbol,name,recommend_date,note
-20260402-600519-1,600519,贵州茅台,2026-04-02,首次推荐
-20260416-600519-1,600519,贵州茅台,2026-04-16,二次推荐
-20260409-000858-1,000858,五粮液,2026-04-09,消费白马样例
-20260416-300750-1,300750,宁德时代,2026-04-16,新能源龙头样例
+20260506-301666-1,301666,大普微,2026-05-06,empty
+20260521-688820-1,688820,盛合晶微,2026-05-21,empty
+20260525-603986-1,603986,兆易创新,2026-05-24,二次推荐
 ```
 
-其中：
+字段说明：
 
-- `id` 是推荐事件唯一标识，建议全表唯一
-- `recommend_date` 使用 `YYYY-MM-DD`
-- `symbol` 默认建议直接填 6 位 A 股代码
-- 上交所例子：`600519`
-- 深交所主板例子：`000001`
-- 创业板例子：`300750`
-- 如果你习惯写后缀，也支持 `600519.SH`、`600519.SS`、`000001.SZ`
+- `id`：推荐事件唯一标识
+- `symbol`：股票代码列名目前仍保留为 `symbol`
+- `name`：股票名称
+- `recommend_date`：你记录的推荐日期，格式必须是 `YYYY-MM-DD`
+- `note`：可选备注
 
-程序会自动转换成数据源需要的格式：
+补充规则：
 
-- `600xxx / 601xxx / 603xxx / 688xxx` 自动识别为上交所
-- `000xxx / 001xxx / 002xxx / 300xxx` 自动识别为深交所
+- CSV 行可以乱序，脚本会自动按日期和 `id` 排序写回
+- 同一只股票允许多次出现
+- 同一天同一只股票出现多次时，会自动生成不同的事件 `id`
+- 支持直接填 `600519`、`000001`、`300750`
+- 也兼容 `600519.SH`、`600519.SS`、`000001.SZ`
 
-CSV 支持乱序录入。若个别行存在空字段、日期格式错误或代码格式错误，脚本会把这些行记入失败列表，不会中断整次更新。
+## 页面现在展示什么
 
-## 多次推荐如何统计
+网页默认按股票分组展示，同时支持切换到按事件平铺。
 
-项目现在默认按“推荐事件”统计，而不是按股票去重统计：
+当前核心指标：
 
-- 同一只股票在不同日期多次推荐：保留多行，分别计算收益
-- 每一行都代表一次独立样本
-- 页面默认按股票分组展示，展开后查看推荐事件时间线
-- 页面支持切换到“按事件平铺”
-- 展开后的事件表完整展示推荐日期、当天价格、当前价、收益率、5 日收益、20 日收益、最大涨幅、最大回撤、是否盈利
+- 推荐日建仓价
+- 当前价与当前收益率
+- 5 日收益
+- 10 日收益
+- 20 日收益
+- 最大涨幅
+- 最大回撤
+- 是否盈利
 
-如果 `id` 重复，脚本会把重复行记入失败列表，不会混淆两次推荐。
+展示规则：
 
-## 当前指标定义
+- 同一只股票多次推荐时，默认折叠为首条记录，可手动展开
+- 展开后，后续推荐会显示在同组内
+- 多次推荐的股票，在展开状态下才会显示“第 N 次推荐”
+- 5 日、10 日、20 日、最大涨幅、最大回撤都会额外显示对应价格
+- 如果推荐日不是交易日，当天价格会显示成 `MM-DD(顺延)`
 
-- 推荐日期：你录入的日期
-- 当天价格：推荐日当天收盘价；若当天非交易日，则取之后第一个交易日收盘价
-- 当前价：最新一个交易日收盘价
-- 收益率：`当前价 / 建仓价 - 1`
-- 5 日收益：推荐后第 5 个交易日收盘收益
-- 20 日收益：推荐后第 20 个交易日收盘收益
-- 最大涨幅：推荐后至今的区间最高价相对建仓价涨幅
-- 最大回撤：推荐后至今，按收盘价序列计算的峰值回撤
-- 是否盈利：当前收益率是否大于 0
+## 异常和兜底
 
-## 本地运行
+更新脚本不会因为个别坏数据把整次更新打断。
+
+### 失败记录
+
+以下情况会进入失败列表，而不是导致整次更新失败：
+
+- 空字段
+- 日期格式错误
+- 非法 A 股代码
+- 重复 `id`
+- 抓价失败
+
+### 待跟踪记录
+
+如果推荐日期之后暂时还没有可用交易日，这条记录不会进入失败列表，而会进入“待跟踪”：
+
+- 未来日期
+- 当天还没出可用日线
+- 推荐后暂无后续交易日
+
+## 本地调试
+
+刷新数据：
 
 ```bash
 python3 scripts/update_data.py
 ```
 
-执行后会更新 `docs/data/metrics.json`。
-
-如果你想本地预览页面，建议启动一个静态文件服务器：
+启动本地静态服务：
 
 ```bash
 python3 -m http.server 8000 --directory docs
@@ -129,26 +121,44 @@ python3 -m http.server 8000 --directory docs
 
 然后访问 `http://localhost:8000`。
 
-直接双击打开 `docs/index.html` 时，部分浏览器会因为 `fetch` 本地 JSON 的限制而加载失败。
+如果直接双击打开 `docs/index.html`，浏览器通常会因为本地 `fetch` 限制而读不到 `metrics.json`。
 
-## GitHub Pages 部署
+## 部署到 GitHub Pages
 
-1. 把仓库推到 GitHub
-2. 在仓库 `Settings -> Pages` 中启用 GitHub Pages
-3. Source 选择 `GitHub Actions`
-4. 推送代码到 `main` 分支
-5. 等待 `.github/workflows/pages.yml` 首次执行完成
+当前仓库已经使用 GitHub Pages + GitHub Actions 方案，工作流文件是 `.github/workflows/pages.yml`。
 
-之后会有两种自动更新方式：
+工作流触发方式：
 
-- 你每次 push 新推荐股票时自动更新
-- GitHub Actions 按 cron 每天自动更新一次
+- push 到 `main`
+- 手动 `Run workflow`
+- 定时任务：每天 `18:10`（北京时间）
 
-当前工作流里的 `cron: "10 10 * * *"` 按 UTC 执行，等于北京时间每天 `18:10`。
+如果你希望继续免费使用 GitHub Actions + GitHub Pages，最简单的方式是保持仓库为公开仓库。
 
-## 后续最值得加的两个功能
+## 目录结构
 
-如果你确认这套路径可用，下一步最值得加的是：
+```text
+.
+├── .github/workflows/pages.yml
+├── docs/
+│   ├── index.html
+│   ├── app.js
+│   ├── styles.css
+│   └── data/
+│       ├── recommendations.csv
+│       └── metrics.json
+├── scripts/
+│   ├── manage_recommendations.py
+│   └── update_data.py
+└── README.md
+```
 
-1. 批量导入群消息整理后的推荐记录
-2. 增加“按推荐人 / 按月份 / 按板块”的胜率统计
+## 指标口径
+
+- 当天价格：推荐日当天收盘价；若当天不是交易日，则顺延到下一个交易日
+- 当前价：最新一个可用交易日收盘价
+- 收益率：`当前价 / 建仓价 - 1`
+- 5 日 / 10 日 / 20 日收益：推荐后第 5 / 10 / 20 个交易日相对建仓价的收益
+- 最大涨幅：推荐后区间最高价相对建仓价的涨幅
+- 最大回撤：推荐后按收盘价序列计算的区间最大回撤
+- 是否盈利：当前收益率是否大于 0

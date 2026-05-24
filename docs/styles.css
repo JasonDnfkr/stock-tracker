@@ -243,6 +243,12 @@ table {
   border-collapse: collapse;
 }
 
+.event-table th:first-child,
+.event-table td:first-child {
+  width: 160px;
+  max-width: 160px;
+}
+
 th,
 td {
   padding: 11px 10px;
@@ -290,13 +296,19 @@ th {
 
 .stock-cell {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 8px;
   flex-wrap: wrap;
 }
 
 .stock-cell.compact {
   gap: 6px;
+}
+
+.stock-subline {
+  color: var(--muted);
+  font-size: 0.82rem;
+  flex-basis: 100%;
 }
 
 .group-toggle-btn {

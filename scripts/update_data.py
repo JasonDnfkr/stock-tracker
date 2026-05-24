@@ -289,12 +289,15 @@ def compute_record(rec: Recommendation, bars: list[dict]) -> dict:
   highs_since_entry = [float(bar["high"]) for bar in bars[entry_index:] if bar["high"] is not None]
 
   bar_5d = bars[entry_index + 5] if entry_index + 5 < len(bars) else None
+  bar_10d = bars[entry_index + 10] if entry_index + 10 < len(bars) else None
   bar_20d = bars[entry_index + 20] if entry_index + 20 < len(bars) else None
 
   return_rate = current_price / entry_price - 1
   return_5d_price = float(bar_5d["close"]) if bar_5d else None
+  return_10d_price = float(bar_10d["close"]) if bar_10d else None
   return_20d_price = float(bar_20d["close"]) if bar_20d else None
   return_5d = (return_5d_price / entry_price - 1) if return_5d_price is not None else None
+  return_10d = (return_10d_price / entry_price - 1) if return_10d_price is not None else None
   return_20d = (return_20d_price / entry_price - 1) if return_20d_price is not None else None
   max_gain_price = max(highs_since_entry) if highs_since_entry else None
   max_gain = max_gain_price / entry_price - 1 if max_gain_price is not None else None
@@ -313,6 +316,8 @@ def compute_record(rec: Recommendation, bars: list[dict]) -> dict:
     "return_rate": round(return_rate, 6),
     "return_5d": round(return_5d, 6) if return_5d is not None else None,
     "return_5d_price": round(return_5d_price, 4) if return_5d_price is not None else None,
+    "return_10d": round(return_10d, 6) if return_10d is not None else None,
+    "return_10d_price": round(return_10d_price, 4) if return_10d_price is not None else None,
     "return_20d": round(return_20d, 6) if return_20d is not None else None,
     "return_20d_price": round(return_20d_price, 4) if return_20d_price is not None else None,
     "max_gain": round(max_gain, 6) if max_gain is not None else None,
@@ -388,6 +393,7 @@ def build_summary(records: list[dict]) -> dict:
     "win_rate": round(profitable / total, 6) if total else None,
     "average_return": average([record.get("return_rate") for record in records]),
     "average_return_5d": average([record.get("return_5d") for record in records]),
+    "average_return_10d": average([record.get("return_10d") for record in records]),
     "average_return_20d": average([record.get("return_20d") for record in records]),
   }
 

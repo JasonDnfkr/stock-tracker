@@ -60,6 +60,32 @@ function formatNumber(value) {
   return number.format(value);
 }
 
+function formatShortDate(dateText) {
+  if (!dateText) {
+    return "--";
+  }
+
+  const [year, month, day] = dateText.split("-");
+  if (!year || !month || !day) {
+    return dateText;
+  }
+
+  return `${month}-${day}`;
+}
+
+function formatEntryDateLabel(entryDate, recommendDate) {
+  if (!entryDate) {
+    return "--";
+  }
+
+  const shortDate = formatShortDate(entryDate);
+  if (recommendDate && entryDate !== recommendDate) {
+    return `${shortDate}(顺延)`;
+  }
+
+  return shortDate;
+}
+
 function renderMetricWithPrice(rate, price) {
   const toneClass = metricClass(rate);
   return `
@@ -76,6 +102,15 @@ function renderPriceWithMetric(price, rate) {
     <div class="price-cell">
       <span class="${toneClass}">${formatNumber(price)}</span>
       <span class="cell-note ${toneClass}">${formatSignedPercent(rate)}</span>
+    </div>
+  `;
+}
+
+function renderEntryPrice(price, entryDate, recommendDate) {
+  return `
+    <div class="price-cell">
+      <span>${formatNumber(price)}</span>
+      <span class="cell-note" title="${entryDate && recommendDate && entryDate !== recommendDate ? `顺延到 ${entryDate}` : entryDate || ""}">${formatEntryDateLabel(entryDate, recommendDate)}</span>
     </div>
   `;
 }
@@ -101,6 +136,7 @@ function renderSummary(summary) {
     ["当前胜率", formatPercent(summary.win_rate), ""],
     ["平均收益率", formatSignedPercent(summary.average_return), metricClass(summary.average_return)],
     ["平均 5 日收益", formatSignedPercent(summary.average_return_5d), metricClass(summary.average_return_5d)],
+    ["平均 10 日收益", formatSignedPercent(summary.average_return_10d), metricClass(summary.average_return_10d)],
   ];
 
   summaryGrid.innerHTML = cards
@@ -213,29 +249,55 @@ function renderGroupedView(records) {
                   }
                 </div>
               `
-            : `<span class="group-placeholder"></span>`;
+            : `
+                <div class="stock-cell compact">
+                  <span class="group-placeholder"></span>
+                  <span class="stock-subline">
+                    ${record.recommend_date}
+                    ${showSequenceHint ? ` · 第 ${record.recommendation_sequence} 次` : ""}
+                  </span>
+                </div>
+              `;
 
           return `
             <tr class="group-event-row ${rowStateClass}">
-              <td>${stockCell}</td>
               <td title="事件 ID：${record.id}">
-                <div class="price-cell">
-                  <span>${record.recommend_date}</span>
-                  ${showSequenceHint ? `<span class="cell-note">第 ${record.recommendation_sequence} 次推荐</span>` : ""}
-                </div>
+                ${
+                  isGroupStart
+                    ? `
+                      <div class="stock-cell compact">
+                        <span class="stock-symbol">${record.symbol}</span>
+                        <span class="stock-name">${record.name || "--"}</span>
+                        ${
+                          group.recommendation_count > 1
+                            ? `
+                              <button
+                                class="group-toggle-btn"
+                                type="button"
+                                data-group-symbol="${group.symbol}"
+                                aria-expanded="${isExpanded ? "true" : "false"}"
+                                aria-label="${isExpanded ? "收起后续推荐记录" : `展开其余 ${group.recommendation_count - 1} 条推荐记录`}"
+                              >
+                                ${isExpanded ? "收起" : "展开"}
+                              </button>
+                            `
+                            : ""
+                        }
+                        <span class="stock-subline">
+                          ${record.recommend_date}
+                          ${showSequenceHint ? ` · 第 ${record.recommendation_sequence} 次` : ""}
+                        </span>
+                      </div>
+                    `
+                    : stockCell
+                }
               </td>
               <td>
-                <div class="price-cell">
-                  <span>${formatNumber(record.entry_price)}</span>
-                  ${
-                    record.entry_date && record.entry_date !== record.recommend_date
-                      ? `<span class="cell-note">顺延到 ${record.entry_date}</span>`
-                      : ""
-                  }
-                </div>
+                ${renderEntryPrice(record.entry_price, record.entry_date, record.recommend_date)}
               </td>
               <td>${renderPriceWithMetric(record.current_price, record.return_rate)}</td>
               <td>${renderMetricWithPrice(record.return_5d, record.return_5d_price)}</td>
+              <td>${renderMetricWithPrice(record.return_10d, record.return_10d_price)}</td>
               <td>${renderMetricWithPrice(record.return_20d, record.return_20d_price)}</td>
               <td>${renderMetricWithPrice(record.max_gain, record.max_gain_price)}</td>
               <td>${renderMetricWithPrice(record.max_drawdown, record.max_drawdown_price)}</td>
@@ -277,21 +339,15 @@ function renderTable(records) {
                     : ""
                 }
               </div>
+              <span class="stock-subline">${record.recommend_date}</span>
             </div>
           </td>
-          <td title="事件 ID：${record.id}">${record.recommend_date}</td>
           <td>
-            <div class="price-cell">
-              <span>${formatNumber(record.entry_price)}</span>
-              ${
-                record.entry_date && record.entry_date !== record.recommend_date
-                  ? `<span class="cell-note">顺延到 ${record.entry_date}</span>`
-                  : ""
-              }
-            </div>
+            ${renderEntryPrice(record.entry_price, record.entry_date, record.recommend_date)}
           </td>
           <td>${renderPriceWithMetric(record.current_price, record.return_rate)}</td>
           <td>${renderMetricWithPrice(record.return_5d, record.return_5d_price)}</td>
+          <td>${renderMetricWithPrice(record.return_10d, record.return_10d_price)}</td>
           <td>${renderMetricWithPrice(record.return_20d, record.return_20d_price)}</td>
           <td>${renderMetricWithPrice(record.max_gain, record.max_gain_price)}</td>
           <td>${renderMetricWithPrice(record.max_drawdown, record.max_drawdown_price)}</td>
