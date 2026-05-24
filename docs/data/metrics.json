@@ -1,0 +1,62 @@
+{
+  "generated_at": "2026-05-24 23:40:44 CST",
+  "summary": {
+    "total_picks": 3,
+    "profitable_picks": 1,
+    "win_rate": 0.333333,
+    "average_return": -0.014423,
+    "average_return_5d": 0.001522,
+    "average_return_20d": -0.024342
+  },
+  "records": [
+    {
+      "symbol": "600519.SS",
+      "name": "贵州茅台",
+      "note": "样例数据",
+      "recommend_date": "2026-04-16",
+      "entry_date": "2026-04-16",
+      "entry_price": 1462.84,
+      "current_price": 1290.2,
+      "return_rate": -0.118017,
+      "return_5d": -0.029969,
+      "return_20d": -0.094706,
+      "max_gain": 0.00996,
+      "max_drawdown": -0.118017,
+      "is_profitable": false,
+      "current_date": "2026-05-22"
+    },
+    {
+      "symbol": "0700.HK",
+      "name": "腾讯控股",
+      "note": "样例数据",
+      "recommend_date": "2026-04-09",
+      "entry_date": "2026-04-09",
+      "entry_price": 508.5,
+      "current_price": 441.4,
+      "return_rate": -0.131957,
+      "return_5d": 0.016716,
+      "return_20d": -0.07296,
+      "max_gain": 0.035398,
+      "max_drawdown": -0.159809,
+      "is_profitable": false,
+      "current_date": "2026-05-22"
+    },
+    {
+      "symbol": "AAPL",
+      "name": "Apple",
+      "note": "样例数据",
+      "recommend_date": "2026-04-02",
+      "entry_date": "2026-04-02",
+      "entry_price": 255.92,
+      "current_price": 308.82,
+      "return_rate": 0.206705,
+      "return_5d": 0.017818,
+      "return_20d": 0.094639,
+      "max_gain": 0.216786,
+      "max_drawdown": -0.025197,
+      "is_profitable": true,
+      "current_date": "2026-05-22"
+    }
+  ],
+  "failures": []
+}

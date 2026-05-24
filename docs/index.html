@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>荐股胜率追踪</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Stock Tracker</p>
+          <h1>荐股胜率追踪面板</h1>
+          <p class="hero-text">
+            用 GitHub Pages 展示结果，用 GitHub Actions 每天自动刷新数据。
+            你只需要维护推荐股票清单。
+          </p>
+        </div>
+        <div class="hero-card">
+          <p class="hero-card-label">当前模式</p>
+          <p class="hero-card-value">零服务器 / 静态部署</p>
+          <p class="hero-card-note">
+            数据源默认使用 Yahoo Finance 风格代码，例如
+            <code>AAPL</code>、<code>0700.HK</code>、<code>600519.SS</code>。
+          </p>
+        </div>
+      </header>
+
+      <main class="content">
+        <section class="panel" id="summary-panel">
+          <div class="section-head">
+            <div>
+              <p class="section-kicker">概览</p>
+              <h2>胜率与收益</h2>
+            </div>
+            <p class="timestamp" id="updated-at">加载中...</p>
+          </div>
+          <div class="summary-grid" id="summary-grid"></div>
+        </section>
+
+        <section class="panel">
+          <div class="section-head">
+            <div>
+              <p class="section-kicker">推荐清单</p>
+              <h2>单票表现</h2>
+            </div>
+            <label class="search-box">
+              <span>搜索</span>
+              <input id="search-input" type="search" placeholder="股票代码 / 名称" />
+            </label>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>股票</th>
+                  <th>推荐日期</th>
+                  <th>当天价格</th>
+                  <th>当前价</th>
+                  <th>收益率</th>
+                  <th>5日收益</th>
+                  <th>20日收益</th>
+                  <th>最大涨幅</th>
+                  <th>最大回撤</th>
+                  <th>是否盈利</th>
+                </tr>
+              </thead>
+              <tbody id="records-body"></tbody>
+            </table>
+          </div>
+          <div class="empty-state hidden" id="empty-state">
+            没有匹配的数据。
+          </div>
+        </section>
+
+        <section class="panel hidden" id="failures-panel">
+          <div class="section-head">
+            <div>
+              <p class="section-kicker">异常</p>
+              <h2>抓价失败记录</h2>
+            </div>
+          </div>
+          <div class="failure-list" id="failures-list"></div>
+        </section>
+
+        <section class="panel">
+          <div class="section-head">
+            <div>
+              <p class="section-kicker">录入方式</p>
+              <h2>如何新增推荐股票</h2>
+            </div>
+          </div>
+          <div class="steps">
+            <div class="step">
+              <span>1</span>
+              <p>编辑 <code>docs/data/recommendations.csv</code>。</p>
+            </div>
+            <div class="step">
+              <span>2</span>
+              <p>新增一行：<code>symbol,name,recommend_date,note</code>。</p>
+            </div>
+            <div class="step">
+              <span>3</span>
+              <p>推送到 GitHub 后，页面会自动重新抓价并更新。</p>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="./app.js" type="module"></script>
+  </body>
+</html>

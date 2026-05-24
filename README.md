@@ -1,1 +1,107 @@
-# stock-tracker
+# Stock Tracker
+
+一个适合个人使用的“荐股胜率追踪”小项目。
+
+特点：
+
+- 不需要自购服务器
+- 网页直接部署到 GitHub Pages
+- GitHub Actions 每天自动刷新价格
+- 你只需要维护推荐股票列表
+
+## 适合你的最小方案
+
+如果你的核心诉求是“观察群主长期胜率”，最快的方式不是先做 AI Agent，而是：
+
+1. 手工录入每次推荐的股票和日期
+2. 由 GitHub Actions 每天自动抓取最新价格
+3. 在网页上展示胜率、收益率、5 日/20 日表现、最大涨幅、最大回撤
+
+首版已经按这个思路实现。
+
+## 项目结构
+
+```text
+.
+├── .github/workflows/pages.yml       # 自动更新数据并部署 Pages
+├── docs/
+│   ├── index.html                    # 前端页面
+│   ├── app.js                        # 页面逻辑
+│   ├── styles.css                    # 页面样式
+│   └── data/
+│       ├── recommendations.csv       # 你维护的推荐列表
+│       └── metrics.json              # 自动生成的结果
+└── scripts/update_data.py            # 抓价并计算指标
+```
+
+## 如何录入股票
+
+编辑 [docs/data/recommendations.csv](/data00/home/zehao.zhang/main/self/stock-tracker/docs/data/recommendations.csv)，格式如下：
+
+```csv
+symbol,name,recommend_date,note
+AAPL,Apple,2026-04-02,样例数据
+0700.HK,腾讯控股,2026-04-09,样例数据
+600519.SS,贵州茅台,2026-04-16,样例数据
+```
+
+其中：
+
+- `recommend_date` 使用 `YYYY-MM-DD`
+- `symbol` 使用 Yahoo Finance 风格代码
+- 美股例子：`AAPL`
+- 港股例子：`0700.HK`
+- 上交所例子：`600519.SS`
+- 深交所例子：`000001.SZ`
+
+## 当前指标定义
+
+- 推荐日期：你录入的日期
+- 当天价格：推荐日当天收盘价；若当天非交易日，则取之后第一个交易日收盘价
+- 当前价：最新一个交易日收盘价
+- 收益率：`当前价 / 建仓价 - 1`
+- 5 日收益：推荐后第 5 个交易日收盘收益
+- 20 日收益：推荐后第 20 个交易日收盘收益
+- 最大涨幅：推荐后至今的区间最高价相对建仓价涨幅
+- 最大回撤：推荐后至今，按收盘价序列计算的峰值回撤
+- 是否盈利：当前收益率是否大于 0
+
+## 本地运行
+
+```bash
+python3 scripts/update_data.py
+```
+
+执行后会更新 `docs/data/metrics.json`。
+
+如果你想本地预览页面，建议启动一个静态文件服务器：
+
+```bash
+python3 -m http.server 8000 --directory docs
+```
+
+然后访问 `http://localhost:8000`。
+
+直接双击打开 `docs/index.html` 时，部分浏览器会因为 `fetch` 本地 JSON 的限制而加载失败。
+
+## GitHub Pages 部署
+
+1. 把仓库推到 GitHub
+2. 在仓库 `Settings -> Pages` 中启用 GitHub Pages
+3. Source 选择 `GitHub Actions`
+4. 推送代码到 `main` 分支
+5. 等待 `.github/workflows/pages.yml` 首次执行完成
+
+之后会有两种自动更新方式：
+
+- 你每次 push 新推荐股票时自动更新
+- GitHub Actions 按 cron 每天自动更新一次
+
+当前工作流里的 `cron: "10 10 * * *"` 按 UTC 执行，等于北京时间每天 `18:10`。
+
+## 后续最值得加的两个功能
+
+如果你确认这套路径可用，下一步最值得加的是：
+
+1. 批量导入群消息整理后的推荐记录
+2. 增加“按推荐人 / 按月份 / 按板块”的胜率统计
