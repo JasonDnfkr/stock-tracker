@@ -236,12 +236,6 @@ th {
   gap: 2px;
 }
 
-.id-cell {
-  font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
-  font-size: 0.82rem;
-  color: var(--muted);
-}
-
 .stock-symbol {
   font-weight: 700;
 }

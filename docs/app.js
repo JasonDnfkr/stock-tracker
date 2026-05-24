@@ -128,12 +128,11 @@ function renderTable(records) {
 
       return `
         <tr class="${rowClass}" ${rowStyle}>
-          <td class="id-cell">${record.id}</td>
           <td>
             <div class="stock-cell">
               <span class="stock-symbol">${record.symbol}</span>
               <div class="stock-meta">
-                <span class="stock-name">${record.name || "--"}</span>
+                <span class="stock-name" title="事件 ID：${record.id}">${record.name || "--"}</span>
                 ${
                   hasRepeat
                     ? `<span class="repeat-badge">共 ${record.recommendation_count_for_symbol} 次</span>`

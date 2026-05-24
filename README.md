@@ -30,14 +30,39 @@
 │   ├── app.js                        # 页面逻辑
 │   ├── styles.css                    # 页面样式
 │   └── data/
-│       ├── recommendations.csv       # 你维护的推荐列表
+│       ├── recommendations.csv       # 推荐事件列表
 │       └── metrics.json              # 自动生成的结果
+├── scripts/manage_recommendations.py # 本地录入/修改推荐记录
 └── scripts/update_data.py            # 抓价并计算指标
 ```
 
 ## 如何录入股票
 
-编辑 [docs/data/recommendations.csv](/data00/home/zehao.zhang/main/self/stock-tracker/docs/data/recommendations.csv)，格式如下：
+推荐你优先使用本地工具 [scripts/manage_recommendations.py](/data00/home/zehao.zhang/main/self/stock-tracker/scripts/manage_recommendations.py)，不要手工维护 `id`。
+
+常用命令：
+
+```bash
+python3 scripts/manage_recommendations.py add --code 600519 --name 贵州茅台 --recommend-date 2026-05-25 --note 三次推荐
+python3 scripts/manage_recommendations.py list
+python3 scripts/manage_recommendations.py update --id 20260525-600519-1 --note 调整备注
+python3 scripts/manage_recommendations.py remove --id 20260525-600519-1
+```
+
+如果你希望录入后顺手刷新页面数据，可以加 `--refresh`：
+
+```bash
+python3 scripts/manage_recommendations.py add --code 600519 --name 贵州茅台 --recommend-date 2026-05-25 --note 三次推荐 --refresh
+```
+
+工具会自动：
+
+- 生成唯一 `id`
+- 校验 A 股代码格式
+- 校验日期格式
+- 按日期和 `id` 重新写回 CSV
+
+底层写入的 [docs/data/recommendations.csv](/data00/home/zehao.zhang/main/self/stock-tracker/docs/data/recommendations.csv) 格式如下：
 
 ```csv
 id,symbol,name,recommend_date,note
