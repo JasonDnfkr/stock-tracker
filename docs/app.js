@@ -1,15 +1,20 @@
 const summaryGrid = document.getElementById("summary-grid");
 const recordsBody = document.getElementById("records-body");
-const summaryBody = document.getElementById("summary-body");
+const stockGroupList = document.getElementById("stock-group-list");
 const updatedAt = document.getElementById("updated-at");
 const searchInput = document.getElementById("search-input");
 const emptyState = document.getElementById("empty-state");
-const summaryEmptyState = document.getElementById("summary-empty-state");
+const groupedEmptyState = document.getElementById("grouped-empty-state");
 const failuresPanel = document.getElementById("failures-panel");
 const failuresList = document.getElementById("failures-list");
+const groupedView = document.getElementById("grouped-view");
+const eventView = document.getElementById("event-view");
+const groupedViewBtn = document.getElementById("grouped-view-btn");
+const eventViewBtn = document.getElementById("event-view-btn");
 
 let allRecords = [];
 let allStockSummaries = [];
+let currentView = "grouped";
 
 const percent = new Intl.NumberFormat("zh-CN", {
   style: "percent",
@@ -109,6 +114,135 @@ function renderSummary(summary) {
     .join("");
 }
 
+function stockSummaryMap(records) {
+  const grouped = new Map();
+  for (const record of records) {
+    if (!grouped.has(record.symbol)) {
+      grouped.set(record.symbol, []);
+    }
+    grouped.get(record.symbol).push(record);
+  }
+
+  for (const symbolRecords of grouped.values()) {
+    symbolRecords.sort((a, b) => {
+      if (a.recommendation_sequence !== b.recommendation_sequence) {
+        return a.recommendation_sequence - b.recommendation_sequence;
+      }
+      return a.recommend_date.localeCompare(b.recommend_date);
+    });
+  }
+
+  return grouped;
+}
+
+function renderGroupedView(summaries, records) {
+  if (!summaries.length) {
+    stockGroupList.innerHTML = "";
+    groupedEmptyState.classList.remove("hidden");
+    return;
+  }
+
+  groupedEmptyState.classList.add("hidden");
+  const recordsBySymbol = stockSummaryMap(records);
+
+  stockGroupList.innerHTML = summaries
+    .map((summary) => {
+      const groupColor = groupAccent(summary.symbol);
+      const events = recordsBySymbol.get(summary.symbol) || [];
+      const shouldOpen = summary.recommendation_count > 1;
+
+      const eventRows = events
+        .map((record) => {
+          const profitClass = record.is_profitable ? "profit" : "loss";
+          const profitLabel = record.is_profitable ? "盈利" : "亏损";
+
+          return `
+            <tr>
+              <td><span class="sequence-badge" title="事件 ID：${record.id}">第 ${record.recommendation_sequence} 次</span></td>
+              <td>${record.recommend_date}</td>
+              <td>
+                <div class="price-cell">
+                  <span>${formatNumber(record.entry_price)}</span>
+                  ${
+                    record.entry_date && record.entry_date !== record.recommend_date
+                      ? `<span class="cell-note">顺延到 ${record.entry_date}</span>`
+                      : ""
+                  }
+                </div>
+              </td>
+              <td>${formatNumber(record.current_price)}</td>
+              <td class="${metricClass(record.return_rate)}">${formatSignedPercent(record.return_rate)}</td>
+              <td class="${metricClass(record.return_5d)}">${formatSignedPercent(record.return_5d)}</td>
+              <td class="${metricClass(record.return_20d)}">${formatSignedPercent(record.return_20d)}</td>
+              <td class="${metricClass(record.max_gain)}">${formatSignedPercent(record.max_gain)}</td>
+              <td class="${metricClass(record.max_drawdown)}">${formatSignedPercent(record.max_drawdown)}</td>
+              <td><span class="pill ${profitClass}">${profitLabel}</span></td>
+            </tr>
+          `;
+        })
+        .join("");
+
+      return `
+        <details class="stock-group-card" style="--group-accent: ${groupColor}" ${shouldOpen ? "open" : ""}>
+          <summary class="stock-group-summary">
+            <div class="group-main">
+              <div class="group-title">
+                <span class="group-symbol">${summary.symbol}</span>
+                <span class="group-name">${summary.name || "--"}</span>
+                <span class="repeat-badge">共 ${summary.recommendation_count} 次</span>
+              </div>
+              <div class="group-subtitle">
+                <span>首次推荐 ${summary.first_recommend_date}</span>
+                <span>最近推荐 ${summary.latest_recommend_date}</span>
+              </div>
+            </div>
+            <div class="group-metrics">
+              <div class="group-metric">
+                <span class="group-metric-label">盈利次数</span>
+                <span class="group-metric-value">${summary.profitable_count}/${summary.recommendation_count}</span>
+              </div>
+              <div class="group-metric">
+                <span class="group-metric-label">胜率</span>
+                <span class="group-metric-value ${winRateClass(summary.win_rate)}">${formatPercent(summary.win_rate)}</span>
+              </div>
+              <div class="group-metric">
+                <span class="group-metric-label">平均收益</span>
+                <span class="group-metric-value ${metricClass(summary.average_return)}">${formatSignedPercent(summary.average_return)}</span>
+              </div>
+              <div class="group-metric">
+                <span class="group-metric-label">最近一次</span>
+                <span class="group-metric-value ${metricClass(summary.latest_return)}">${formatSignedPercent(summary.latest_return)}</span>
+              </div>
+            </div>
+          </summary>
+          <div class="group-detail">
+            <div class="detail-note">展开后按时间线查看该股票的全部推荐事件，鼠标悬浮“第几次推荐”徽标可查看事件 ID。</div>
+            <div class="table-wrap">
+              <table class="nested-table">
+                <thead>
+                  <tr>
+                    <th>推荐次序</th>
+                    <th>推荐日期</th>
+                    <th>当天价格</th>
+                    <th>当前价</th>
+                    <th>收益率</th>
+                    <th>5日收益</th>
+                    <th>20日收益</th>
+                    <th>最大涨幅</th>
+                    <th>最大回撤</th>
+                    <th>是否盈利</th>
+                  </tr>
+                </thead>
+                <tbody>${eventRows}</tbody>
+              </table>
+            </div>
+          </div>
+        </details>
+      `;
+    })
+    .join("");
+}
+
 function renderTable(records) {
   if (!records.length) {
     recordsBody.innerHTML = "";
@@ -142,7 +276,7 @@ function renderTable(records) {
             </div>
           </td>
           <td>
-            <span class="sequence-badge">第 ${record.recommendation_sequence} 次</span>
+            <span class="sequence-badge" title="事件 ID：${record.id}">第 ${record.recommendation_sequence} 次</span>
           </td>
           <td>${record.recommend_date}</td>
           <td>
@@ -168,35 +302,29 @@ function renderTable(records) {
     .join("");
 }
 
-function renderStockSummaries(summaries) {
-  if (!summaries.length) {
-    summaryBody.innerHTML = "";
-    summaryEmptyState.classList.remove("hidden");
-    return;
-  }
+function sortGroupedSummaries(summaries) {
+  return [...summaries].sort((a, b) => {
+    if (b.recommendation_count !== a.recommendation_count) {
+      return b.recommendation_count - a.recommendation_count;
+    }
+    if (b.latest_recommend_date !== a.latest_recommend_date) {
+      return b.latest_recommend_date.localeCompare(a.latest_recommend_date);
+    }
+    return a.symbol.localeCompare(b.symbol);
+  });
+}
 
-  summaryEmptyState.classList.add("hidden");
-  summaryBody.innerHTML = summaries
-    .map(
-      (item) => `
-        <tr>
-          <td>
-            <div class="stock-cell">
-              <span class="stock-symbol">${item.symbol}</span>
-              <span class="stock-name">${item.name || "--"}</span>
-            </div>
-          </td>
-          <td>${item.recommendation_count}</td>
-          <td>${item.profitable_count}</td>
-          <td class="${winRateClass(item.win_rate)}">${formatPercent(item.win_rate)}</td>
-          <td class="${metricClass(item.average_return)}">${formatSignedPercent(item.average_return)}</td>
-          <td class="${metricClass(item.latest_return)}">${formatSignedPercent(item.latest_return)}</td>
-          <td>${item.first_recommend_date}</td>
-          <td>${item.latest_recommend_date}</td>
-        </tr>
-      `,
-    )
-    .join("");
+function syncViewButtons() {
+  groupedView.classList.toggle("hidden", currentView !== "grouped");
+  eventView.classList.toggle("hidden", currentView !== "event");
+  groupedViewBtn.classList.toggle("active", currentView === "grouped");
+  eventViewBtn.classList.toggle("active", currentView === "event");
+}
+
+function renderFilteredViews(records, summaries) {
+  renderTable(records);
+  renderGroupedView(sortGroupedSummaries(summaries), records);
+  syncViewButtons();
 }
 
 function renderFailures(failures) {
@@ -228,8 +356,7 @@ function renderFailures(failures) {
 function applyFilter() {
   const keyword = searchInput.value.trim().toLowerCase();
   if (!keyword) {
-    renderTable(allRecords);
-    renderStockSummaries(allStockSummaries);
+    renderFilteredViews(allRecords, allStockSummaries);
     return;
   }
 
@@ -247,8 +374,7 @@ function applyFilter() {
     );
   });
 
-  renderTable(filtered);
-  renderStockSummaries(filteredSummaries);
+  renderFilteredViews(filtered, filteredSummaries);
 }
 
 async function loadData() {
@@ -262,13 +388,20 @@ async function loadData() {
   allRecords = data.records || [];
   allStockSummaries = data.stock_summaries || [];
   renderSummary(data.summary || {});
-  renderTable(allRecords);
-  renderStockSummaries(allStockSummaries);
+  renderFilteredViews(allRecords, allStockSummaries);
   renderFailures(data.failures || []);
   updatedAt.textContent = `最近更新：${data.generated_at || "--"}`;
 }
 
 searchInput.addEventListener("input", applyFilter);
+groupedViewBtn.addEventListener("click", () => {
+  currentView = "grouped";
+  syncViewButtons();
+});
+eventViewBtn.addEventListener("click", () => {
+  currentView = "event";
+  syncViewButtons();
+});
 
 loadData().catch((error) => {
   updatedAt.textContent = "数据加载失败";

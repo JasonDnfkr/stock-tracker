@@ -43,65 +43,50 @@
         <section class="panel">
           <div class="section-head">
             <div>
-              <p class="section-kicker">推荐事件</p>
-              <h2>每次推荐单独记一条</h2>
+              <p class="section-kicker">观察视图</p>
+              <h2>默认按股票分组展示</h2>
             </div>
-            <label class="search-box">
-              <span>搜索</span>
-              <input id="search-input" type="search" placeholder="股票代码 / 名称" />
-            </label>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>股票</th>
-                  <th>第几次推荐</th>
-                  <th>推荐日期</th>
-                  <th>当天价格</th>
-                  <th>当前价</th>
-                  <th>收益率</th>
-                  <th>5日收益</th>
-                  <th>20日收益</th>
-                  <th>最大涨幅</th>
-                  <th>最大回撤</th>
-                  <th>是否盈利</th>
-                </tr>
-              </thead>
-              <tbody id="records-body"></tbody>
-            </table>
-          </div>
-          <div class="empty-state hidden" id="empty-state">
-            没有匹配的数据。
-          </div>
-        </section>
-
-        <section class="panel">
-          <div class="section-head">
-            <div>
-              <p class="section-kicker">股票汇总</p>
-              <h2>按股票聚合观察</h2>
+            <div class="view-controls">
+              <label class="search-box">
+                <span>搜索</span>
+                <input id="search-input" type="search" placeholder="股票代码 / 名称" />
+              </label>
+              <div class="view-toggle" role="tablist" aria-label="视图切换">
+                <button id="grouped-view-btn" class="toggle-btn active" type="button">按股票分组</button>
+                <button id="event-view-btn" class="toggle-btn" type="button">按事件平铺</button>
+              </div>
             </div>
           </div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>股票</th>
-                  <th>推荐次数</th>
-                  <th>盈利次数</th>
-                  <th>胜率</th>
-                  <th>平均收益率</th>
-                  <th>最近一次收益</th>
-                  <th>首次推荐</th>
-                  <th>最近推荐</th>
-                </tr>
-              </thead>
-              <tbody id="summary-body"></tbody>
-            </table>
+          <div id="grouped-view">
+            <div class="stock-group-list" id="stock-group-list"></div>
+            <div class="empty-state hidden" id="grouped-empty-state">
+              没有匹配的股票分组。
+            </div>
           </div>
-          <div class="empty-state hidden" id="summary-empty-state">
-            没有匹配的汇总数据。
+          <div id="event-view" class="hidden">
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>股票</th>
+                    <th>第几次推荐</th>
+                    <th>推荐日期</th>
+                    <th>当天价格</th>
+                    <th>当前价</th>
+                    <th>收益率</th>
+                    <th>5日收益</th>
+                    <th>20日收益</th>
+                    <th>最大涨幅</th>
+                    <th>最大回撤</th>
+                    <th>是否盈利</th>
+                  </tr>
+                </thead>
+                <tbody id="records-body"></tbody>
+              </table>
+            </div>
+            <div class="empty-state hidden" id="empty-state">
+              没有匹配的数据。
+            </div>
           </div>
         </section>
 

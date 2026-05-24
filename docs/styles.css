@@ -188,6 +188,14 @@ h1 {
   font-size: 0.92rem;
 }
 
+.view-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: end;
+  justify-content: end;
+}
+
 .search-box input {
   width: min(320px, 100%);
   padding: 12px 14px;
@@ -195,6 +203,34 @@ h1 {
   border: 1px solid rgba(110, 23, 33, 0.15);
   background: rgba(255, 255, 255, 0.75);
   color: var(--text);
+}
+
+.view-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 999px;
+  background: rgba(98, 19, 34, 0.06);
+  border: 1px solid rgba(110, 23, 33, 0.1);
+}
+
+.toggle-btn {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 700;
+  padding: 10px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.toggle-btn.active {
+  color: white;
+  background: linear-gradient(135deg, #b62839, #dd7048);
+  box-shadow: 0 8px 18px rgba(182, 40, 57, 0.22);
 }
 
 .table-wrap {
@@ -228,6 +264,118 @@ th {
 
 .event-row.repeat-group td:first-child {
   box-shadow: inset 4px 0 0 var(--group-accent);
+}
+
+.stock-group-list {
+  display: grid;
+  gap: 16px;
+}
+
+.stock-group-card {
+  border: 1px solid rgba(110, 23, 33, 0.1);
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.8), rgba(255, 252, 250, 0.92)),
+    linear-gradient(90deg, color-mix(in srgb, var(--group-accent) 12%, transparent), transparent 20%);
+  overflow: hidden;
+}
+
+.stock-group-summary {
+  list-style: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(360px, 1fr);
+  gap: 16px;
+  align-items: center;
+  padding: 20px 22px;
+  cursor: pointer;
+  position: relative;
+}
+
+.stock-group-summary::-webkit-details-marker {
+  display: none;
+}
+
+.stock-group-summary::after {
+  content: "展开";
+  position: absolute;
+  right: 24px;
+  top: 20px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.stock-group-card[open] .stock-group-summary::after {
+  content: "收起";
+}
+
+.group-main {
+  display: grid;
+  gap: 10px;
+}
+
+.group-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.group-symbol {
+  font-size: 1.18rem;
+  font-weight: 800;
+}
+
+.group-name {
+  color: var(--muted);
+}
+
+.group-subtitle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.group-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.group-metric {
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(110, 23, 33, 0.08);
+}
+
+.group-metric-label {
+  display: block;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.group-metric-value {
+  display: block;
+  margin-top: 6px;
+  font-size: 1.02rem;
+  font-weight: 800;
+}
+
+.group-detail {
+  padding: 0 22px 18px;
+}
+
+.detail-note {
+  margin-bottom: 12px;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.nested-table {
+  min-width: 920px;
 }
 
 .stock-cell {
@@ -395,7 +543,17 @@ th {
     align-items: start;
   }
 
+  .view-controls {
+    width: 100%;
+    justify-content: start;
+  }
+
   .search-box input {
     width: 100%;
+  }
+
+  .stock-group-summary,
+  .group-metrics {
+    grid-template-columns: 1fr;
   }
 }
