@@ -185,6 +185,7 @@ function renderGroupedView(records) {
           const profitLabel = record.is_profitable ? "盈利" : "亏损";
           const isGroupStart = index === 0;
           const isExpanded = expandedGroups.has(group.symbol);
+          const showSequenceHint = group.recommendation_count > 1 && isExpanded;
           const rowStateClass = isGroupStart
             ? "group-start-row"
             : isExpanded
@@ -203,8 +204,9 @@ function renderGroupedView(records) {
                           type="button"
                           data-group-symbol="${group.symbol}"
                           aria-expanded="${isExpanded ? "true" : "false"}"
+                          aria-label="${isExpanded ? "收起后续推荐记录" : `展开其余 ${group.recommendation_count - 1} 条推荐记录`}"
                         >
-                          ${isExpanded ? "收起" : `展开其余 ${group.recommendation_count - 1} 条`}
+                          ${isExpanded ? "收起" : "展开"}
                         </button>
                       `
                       : ""
@@ -216,7 +218,12 @@ function renderGroupedView(records) {
           return `
             <tr class="group-event-row ${rowStateClass}">
               <td>${stockCell}</td>
-              <td title="事件 ID：${record.id}">${record.recommend_date}</td>
+              <td title="事件 ID：${record.id}">
+                <div class="price-cell">
+                  <span>${record.recommend_date}</span>
+                  ${showSequenceHint ? `<span class="cell-note">第 ${record.recommendation_sequence} 次推荐</span>` : ""}
+                </div>
+              </td>
               <td>
                 <div class="price-cell">
                   <span>${formatNumber(record.entry_price)}</span>
@@ -266,7 +273,7 @@ function renderTable(records) {
                 <span class="stock-name" title="事件 ID：${record.id}">${record.name || "--"}</span>
                 ${
                   record.recommendation_count_for_symbol > 1
-                    ? `<span class="repeat-badge">共 ${record.recommendation_count_for_symbol} 次</span>`
+                    ? `<span class="repeat-badge">第 ${record.recommendation_sequence} 次推荐</span>`
                     : ""
                 }
               </div>
