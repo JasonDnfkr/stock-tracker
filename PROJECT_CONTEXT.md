@@ -28,7 +28,7 @@
 
 ## 当前正在做什么
 
-刚完成对 `README.md` 的重写，把文档从“介绍型说明”改成了更贴近当前工作流的“操作手册”。当前没有新的功能开发在进行中，下一步更可能是继续做前端细节优化或数据录入体验优化。
+刚完成一轮散点图与标签交互迭代。当前页面除了表格视图外，概览区还集成了“推荐事件收益时间线”散点图，后续若继续开发，最可能继续打磨的是这张图的标签布局、hover 体验和边缘点展示。
 
 ## 已完成什么
 
@@ -47,6 +47,13 @@
 - `5日 / 10日 / 20日收益`
 - `最大涨幅 / 最大回撤`
 - A 股红涨绿跌配色
+- 概览区散点图：
+  - 推荐事件收益时间线
+  - 压缩纵轴
+  - 横向滚动
+  - 常驻标签
+  - hover tooltip
+  - hover overlay label
 
 ## 哪些问题已经解决
 
@@ -64,6 +71,17 @@
 - 当天价格的顺延说明已压缩为 `MM-DD(顺延)`，避免撑宽布局
 - 顶部 hero 和底部录入说明已从页面上隐藏，但代码仍保留
 - 分组间的装饰色已去掉，避免花哨和干扰
+- 概览区新增散点图，且已并入 summary panel，不再单独占一个 panel
+- 散点图纵轴已改成压缩刻度，避免极值点把其余点挤扁
+- 散点图横轴在点多时支持横向滚动
+- 散点图 tooltip 已从原生 `<title>` 改成自定义浮层，hover 响应更快
+- tooltip 中的事件 ID 已移除
+- tooltip 的 `5日 / 10日 / 20日收益` 读取问题已修复，原因是 `dataset` 不能再用 `data-return-5d` 这类带数字键
+- 散点图会尽量给所有点显示常驻标签，重叠时按优先级隐藏
+- 默认可见标签 hover 时不再跳位置
+- 默认隐藏的点 hover 时会单独以 overlay label 形式展示，并置于最上层
+- 边缘点 hover 时也会显示 overlay label
+- 横轴左右边距已加大，最左/最右刻度和点位不再贴边
 
 ## 哪些方案被否决，以及为什么
 
@@ -87,6 +105,18 @@
 - 在多次推荐股票上显示“关注次数 / 关注跨度 / 单票胜率”：
   - 原因：用户明确表示不是核心诉求，且会引入额外认知噪音
   - 结论：只保留原始收益指标，分组只是为了表达“同一股票被多次推荐”
+- 给散点图所有点强制显示静态标签且不做隐藏：
+  - 原因：会导致标签大面积重叠，读不清
+  - 结论：改成“尽量全部显示 + 冲突时按优先级隐藏”
+- 继续使用浏览器原生 `<title>` 作为散点图 tooltip：
+  - 原因：hover 延迟明显，用户感知较差
+  - 结论：改成自定义 tooltip 浮层
+- hover 时让默认可见标签也改位置：
+  - 原因：用户反馈跳动感强，观感不好
+  - 结论：默认可见标签保持原位，仅原本隐藏的点使用 hover overlay label
+- hover label 仍要求完全安全才显示：
+  - 原因：会导致边缘点 hover 时没有 label
+  - 结论：边缘点 hover 时直接以上层 overlay label 展示
 
 
 # 3. 关键架构/设计决策
@@ -189,6 +219,75 @@ tradeoff：
 - `.profit-text` / `.pill.profit` 必须是红色正收益
 - `.loss-text` / `.pill.loss` 必须是绿色负收益
 
+## 设计决策 7：散点图并入概览区，而不是单独再开一个 panel
+
+为什么这样设计：
+
+- 用户认为图较离散，适合当作概览视图的一部分，而不是与主表格并列的独立大模块
+- 这样页面更紧凑，也符合“先看整体，再看明细”的阅读路径
+
+tradeoff：
+
+- 好处：页面层级更紧凑，图表与 summary 指标联系更强
+- 代价：summary panel 内部承担的信息更多，后续排版要更谨慎
+
+绝对不能破坏：
+
+- 图表当前在 `summary-panel` 内部，不要再无故拆回独立 panel
+
+## 设计决策 8：散点图纵轴使用压缩刻度，而不是线性刻度
+
+为什么这样设计：
+
+- 用户明确反馈极值点会把其他点挤扁
+- 当前收益分布可能有少数大幅盈利样本，线性刻度可读性差
+
+tradeoff：
+
+- 好处：中间区间的点位更可读
+- 代价：纵轴不再是直观线性距离，需要通过刻度文本理解真实收益
+
+绝对不能破坏：
+
+- 刻度文本仍必须显示真实收益率，而不是内部压缩值
+- 代码中的 `compressReturn(value)` / `expandCompressedReturn(value)` 是配套的一组逻辑，不能只改其一
+
+## 设计决策 9：散点图默认标签与 hover 标签分离
+
+为什么这样设计：
+
+- 用户要求默认标签尽量全部展示，但又不希望 hover 时默认可见标签跳位
+- 同时用户又要求默认隐藏的点在 hover 时依然要看到 label
+
+tradeoff：
+
+- 好处：默认视图稳定，hover 时信息补足
+- 代价：需要维护两套标签逻辑：
+  - 默认 label
+  - hover overlay label
+
+绝对不能破坏：
+
+- 默认已显示的 label hover 时不能改位置
+- 原本隐藏的点 hover 时要用 overlay label，而不是改写默认 label 位置
+- overlay label 必须在最上层
+
+## 设计决策 10：散点图 hover tooltip 不再展示事件 ID
+
+为什么这样设计：
+
+- 用户明确不需要在 tooltip 中看到事件 ID
+- tooltip 目标是快速看核心收益信息，不是调试信息
+
+tradeoff：
+
+- 好处：tooltip 更短、更聚焦
+- 代价：如果要查事件 ID，只能通过其他方式（如表格 hover）
+
+绝对不能破坏：
+
+- 散点图 tooltip 当前不要再显示事件 ID，除非用户再次明确要求
+
 
 # 4. 当前 blocker / 风险
 
@@ -203,16 +302,24 @@ tradeoff：
 - GitHub Pages 是静态部署，无法直接在网页前端写入数据
 - 当前没有自动化测试，只做语法和手工页面验证
 - 当前分组折叠状态只保存在前端内存中，刷新页面会丢失
+- 散点图标签布局采用轻量贪心+候选位置策略，不是完整布局引擎；数据量更大时仍可能出现较多隐藏标签
+- hover overlay label 当前允许与其他 label 视觉重叠，只保证位于最上层并靠描边提高可读性
 
 ## 已知 bug
 
-当前没有明确已确认但未修复的功能性 bug。最近一次用户反馈的“多次推荐只显示一次”问题已经通过分组渲染修正。
+当前没有明确已确认但未修复的功能性 bug。最近几轮已修复的问题包括：
+
+- 多次推荐股票只显示一次
+- tooltip 的 `5日 / 10日 / 20日收益` 不显示
+- 默认可见 label hover 时跳位
+- 边缘点 hover 时不显示 label
 
 ## 未验证假设
 
 - `Intl.NumberFormat(..., { signDisplay: "exceptZero" })` 在目标浏览器环境下是否都表现一致，没有做兼容性回归
 - Yahoo Finance 对全部 A 股代码的覆盖和稳定性没有做更大样本验证
 - 前端当前紧凑布局在非常窄的移动端上是否仍完全满足用户偏好，没有系统验证
+- 散点图标签的当前候选位置集合，是否已经是用户最满意的布局，尚未最终定稿
 
 
 # 5. 文件与代码结构
@@ -252,6 +359,7 @@ tradeoff：
 - `<header class="hero hidden">` 顶部 hero 被隐藏但保留
 - 底部“录入方式” section 也被 `hidden`
 - 分组视图和事件视图都共享单次表头
+- 散点图容器 `#timeline-chart` 现在位于 `summary-panel` 内部，而不是独立 section
 
 ### `docs/app.js`
 
@@ -259,6 +367,7 @@ tradeoff：
 
 - 加载 `./data/metrics.json`
 - 渲染 summary cards
+- 渲染概览区散点图
 - 渲染 grouped view / event view
 - 搜索过滤
 - 多次推荐股票的折叠/展开
@@ -269,6 +378,11 @@ tradeoff：
 - `let allRecords = []`
 - `let currentView = "grouped"`
 - `const expandedGroups = new Set()`
+- `const timelineChart = document.getElementById("timeline-chart")`
+- `const timelineEmptyState = document.getElementById("timeline-empty-state")`
+- `const chartTooltip = document.createElement("div")`
+- `let activeTooltipId = null`
+- `let activeChartLabelId = null`
 
 关键函数：
 
@@ -281,7 +395,19 @@ tradeoff：
 - `renderPriceWithMetric(price, rate)`
 - `renderEntryPrice(price, entryDate, recommendDate)`
 - `metricClass(value)`
+- `clamp(value, minValue, maxValue)`
+- `dateToTimestamp(dateText)`
+- `buildTickValues(minValue, maxValue, tickCount)`
+- `escapeHtml(text)`
+- `tooltipMetricText(value)`
+- `tooltipMetricClass(value)`
+- `estimateLabelWidth(text)`
+- `rectsOverlap(a, b)`
+- `rectOverlapsPoint(rect, point, padding = 6)`
+- `compressReturn(value)`
+- `expandCompressedReturn(value)`
 - `renderSummary(summary)`
+- `renderTimelineChart(records)`
 - `stockSummaryMap(records)`
 - `buildGroupedStocks(records)`
 - `renderGroupedView(records)`
@@ -291,6 +417,12 @@ tradeoff：
 - `toggleGroup(symbol)`
 - `renderFailures(failures)`
 - `renderPendingRecords(records)`
+- `hideChartTooltip()`
+- `hideHoverLabelOverlay()`
+- `showHoverLabelOverlay(point)`
+- `setActiveChartLabel(labelId)`
+- `positionChartTooltip(event)`
+- `renderChartTooltip(target)`
 - `applyFilter()`
 - `loadData()`
 
@@ -301,6 +433,14 @@ tradeoff：
 - grouped view 的后续行使用 `.group-follow-row { opacity: 0.75; }`
 - “当前价”列实际是“当前价 + 收益率”
 - `5日 / 10日 / 20日 / 最大涨幅 / 最大回撤` 都是“百分比 + 第二行对应价格”
+- summary panel 内置散点图，不要再额外渲染独立图表 panel
+- 散点图默认标签尽量全显，但冲突时按优先级隐藏
+- 散点图默认已显示 label hover 时不能跳位
+- 散点图默认隐藏点 hover 时要通过 `#chart-hover-label-layer` 生成 overlay label
+- overlay label 需要在最上层，且靠更强描边保证重叠时可读
+- 边缘点 hover 时也必须显示 label
+- 散点图 tooltip 当前不展示事件 ID
+- 横轴左右两侧有额外 padding，最左/最右刻度和点不要贴边
 
 ### `docs/styles.css`
 
@@ -309,6 +449,7 @@ tradeoff：
 - A 股视觉风格
 - 紧凑表格布局
 - 分组折叠行的视觉弱化
+- 散点图、散点图标签、overlay label、tooltip 样式
 
 关键样式约束：
 
@@ -317,6 +458,9 @@ tradeoff：
 - `.group-follow-row td { opacity: 0.75; }`
 - `.group-follow-row.hidden { display: none; }`
 - `.hidden { display: none; }`
+- `.chart-label-text` 是纯文字 label，不再有背景块或边框
+- `.chart-hover-label-layer` 是 hover overlay label 的单独图层
+- `.chart-hover-label-text` 的描边比默认 label 更重
 
 ### `docs/data/recommendations.csv`
 
@@ -406,22 +550,17 @@ CLI contract：
 
 ## 最近修改了哪些文件
 
-按 `git status --short`，当前工作区有修改：
+最近主要修改的是：
 
-- `README.md`
+- `PROJECT_CONTEXT.md`
 - `docs/app.js`
-- `docs/data/metrics.json`
-- `docs/index.html`
 - `docs/styles.css`
-- `scripts/update_data.py`
-- `scripts/__pycache__/update_data.cpython-311.pyc`
 
 说明：
 
-- `docs/app.js` / `docs/index.html` / `docs/styles.css` 是这轮前端迭代的主战场
-- `scripts/update_data.py` 是数据结构演进的关键文件
-- `README.md` 刚被改写为操作手册
-- `docs/data/metrics.json` 是生成产物，不要把它误当作手工源数据
+- 最近这一轮几乎全部是散点图与标签交互迭代
+- `docs/app.js` / `docs/styles.css` 是这轮前端迭代的主战场
+- `docs/data/metrics.json` 仍然是生成产物，不要把它误当作手工源数据
 
 
 # 6. 数据结构 / API / SQL 变化
@@ -649,6 +788,7 @@ node --check docs/app.js
 - 前端无 npm、无打包器、无框架
 - 页面依赖浏览器直接 `fetch("./data/metrics.json")`
 - 因为 `fetch` 限制，不要直接双击 `docs/index.html` 做本地预览
+- 图表和标签逻辑目前全部是原生 DOM + 原生 SVG，没有引入任何图表库
 
 
 # 9. 给下一位 agent 的重要提醒
@@ -671,4 +811,10 @@ node --check docs/app.js
   - `scripts/update_data.py`
   - `docs/app.js`
   - `README.md`
-
+- 散点图 tooltip 之前踩过一个坑：`dataset` 不要再用 `data-return-5d` 这种带数字的名字，已经改成 `data-return-five-day` / `data-return-ten-day` / `data-return-twenty-day`
+- 散点图 hover 交互当前是两套：
+  - 默认 label：静态位置，不跳位
+  - hover overlay label：只给原本隐藏的点用
+- 如果以后继续改 label 布局，不要把“边缘点 hover 也要显示 label”这个要求弄丢
+- 如果以后继续改 hover 交互，不要把“默认已显示 label hover 时不应跳位”这个要求弄丢
+- 当前 label 已经被改成纯文字，没有背景块和边框；如果重新加底板，大概率会再次被用户否掉
