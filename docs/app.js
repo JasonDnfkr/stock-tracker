@@ -1,4 +1,6 @@
 const summaryGrid = document.getElementById("summary-grid");
+const timelineChart = document.getElementById("timeline-chart");
+const timelineEmptyState = document.getElementById("timeline-empty-state");
 const recordsBody = document.getElementById("records-body");
 const stockGroupList = document.getElementById("stock-group-list");
 const updatedAt = document.getElementById("updated-at");
@@ -13,10 +15,16 @@ const groupedView = document.getElementById("grouped-view");
 const eventView = document.getElementById("event-view");
 const groupedViewBtn = document.getElementById("grouped-view-btn");
 const eventViewBtn = document.getElementById("event-view-btn");
+const chartTooltip = document.createElement("div");
+
+chartTooltip.className = "chart-tooltip hidden";
+document.body.append(chartTooltip);
 
 let allRecords = [];
 let currentView = "grouped";
 const expandedGroups = new Set();
+let activeTooltipId = null;
+let activeChartLabelId = null;
 
 const percent = new Intl.NumberFormat("zh-CN", {
   style: "percent",
@@ -71,6 +79,14 @@ function formatShortDate(dateText) {
   }
 
   return `${month}-${day}`;
+}
+
+function formatTooltipDate(dateText) {
+  if (!dateText) {
+    return "--";
+  }
+
+  return dateText;
 }
 
 function formatEntryDateLabel(entryDate, recommendDate) {
@@ -128,6 +144,76 @@ function metricClass(value) {
   return "neutral-text";
 }
 
+function clamp(value, minValue, maxValue) {
+  return Math.min(Math.max(value, minValue), maxValue);
+}
+
+function dateToTimestamp(dateText) {
+  const time = Date.parse(`${dateText}T00:00:00`);
+  return Number.isNaN(time) ? null : time;
+}
+
+function buildTickValues(minValue, maxValue, tickCount) {
+  if (tickCount <= 1 || minValue === maxValue) {
+    return [minValue];
+  }
+
+  const step = (maxValue - minValue) / (tickCount - 1);
+  return Array.from({ length: tickCount }, (_, index) => minValue + step * index);
+}
+
+function escapeHtml(text) {
+  return String(text)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function tooltipMetricText(value) {
+  return value === null || value === undefined ? "--" : formatSignedPercent(value);
+}
+
+function tooltipMetricClass(value) {
+  return metricClass(value);
+}
+
+function estimateLabelWidth(text) {
+  return Array.from(text).reduce((width, char) => {
+    if (/[\u4e00-\u9fff]/u.test(char)) {
+      return width + 13;
+    }
+    return width + 7.5;
+  }, 0);
+}
+
+function rectsOverlap(a, b) {
+  return !(
+    a.right < b.left ||
+    a.left > b.right ||
+    a.bottom < b.top ||
+    a.top > b.bottom
+  );
+}
+
+function rectOverlapsPoint(rect, point, padding = 6) {
+  const nearestX = clamp(point.x, rect.left, rect.right);
+  const nearestY = clamp(point.y, rect.top, rect.bottom);
+  const dx = point.x - nearestX;
+  const dy = point.y - nearestY;
+  return dx * dx + dy * dy <= padding * padding;
+}
+
+function compressReturn(value) {
+  const sign = value < 0 ? -1 : 1;
+  return sign * Math.sqrt(Math.abs(value));
+}
+
+function expandCompressedReturn(value) {
+  const sign = value < 0 ? -1 : 1;
+  return sign * value * value;
+}
+
 function renderSummary(summary) {
   const cards = [
     ["推荐总数", summary.total_picks, ""],
@@ -149,6 +235,539 @@ function renderSummary(summary) {
       `,
     )
     .join("");
+}
+
+function renderTimelineChart(records) {
+  const chartRecords = records
+    .filter((record) => record.return_rate !== null && record.return_rate !== undefined)
+    .map((record) => ({
+      ...record,
+      recommend_timestamp: dateToTimestamp(record.recommend_date),
+    }))
+    .filter((record) => record.recommend_timestamp !== null)
+    .sort((a, b) => {
+      if (a.recommend_timestamp !== b.recommend_timestamp) {
+        return a.recommend_timestamp - b.recommend_timestamp;
+      }
+      return a.id.localeCompare(b.id);
+    });
+
+  if (!chartRecords.length) {
+    timelineChart.innerHTML = "";
+    timelineEmptyState.classList.remove("hidden");
+    return;
+  }
+
+  timelineEmptyState.classList.add("hidden");
+
+  const chartWidth = Math.max(920, chartRecords.length * 64);
+  const chartHeight = 320;
+  const margin = { top: 20, right: 56, bottom: 42, left: 84 };
+  const plotWidth = chartWidth - margin.left - margin.right;
+  const plotHeight = chartHeight - margin.top - margin.bottom;
+
+  const xValues = chartRecords.map((record) => record.recommend_timestamp);
+  const yValues = chartRecords.map((record) => record.return_rate);
+  const rawMinX = Math.min(...xValues);
+  const rawMaxX = Math.max(...xValues);
+  const singlePointPaddingMs = 24 * 60 * 60 * 1000;
+  const xPadding = rawMinX === rawMaxX
+    ? singlePointPaddingMs
+    : Math.max((rawMaxX - rawMinX) * 0.06, singlePointPaddingMs);
+  const minX = rawMinX - xPadding;
+  const maxX = rawMaxX + xPadding;
+  const rawMinY = Math.min(...yValues, 0);
+  const rawMaxY = Math.max(...yValues, 0);
+  const compressedMinY = compressReturn(rawMinY);
+  const compressedMaxY = compressReturn(rawMaxY);
+  const compressedPadding = Math.max((compressedMaxY - compressedMinY) * 0.12, 0.08);
+  const minY = compressedMinY - compressedPadding;
+  const maxY = compressedMaxY + compressedPadding;
+  const averageReturn = yValues.reduce((sum, value) => sum + value, 0) / yValues.length;
+
+  const xScale = (value) => {
+    if (minX === maxX) {
+      return margin.left + plotWidth / 2;
+    }
+    return margin.left + ((value - minX) / (maxX - minX)) * plotWidth;
+  };
+
+  const yScale = (value) => {
+    if (minY === maxY) {
+      return margin.top + plotHeight / 2;
+    }
+    return margin.top + (1 - (compressReturn(value) - minY) / (maxY - minY)) * plotHeight;
+  };
+
+  const yScaleFromCompressed = (value) => {
+    if (minY === maxY) {
+      return margin.top + plotHeight / 2;
+    }
+    return margin.top + (1 - (value - minY) / (maxY - minY)) * plotHeight;
+  };
+
+  const sameDateGroups = new Map();
+  for (const record of chartRecords) {
+    if (!sameDateGroups.has(record.recommend_date)) {
+      sameDateGroups.set(record.recommend_date, []);
+    }
+    sameDateGroups.get(record.recommend_date).push(record);
+  }
+
+  const positionedRecords = chartRecords.map((record) => {
+    const sameDateRecords = sameDateGroups.get(record.recommend_date) || [record];
+    const sameDateIndex = sameDateRecords.findIndex((item) => item.id === record.id);
+    const offsetUnit = sameDateRecords.length > 1 ? (sameDateIndex - (sameDateRecords.length - 1) / 2) * 8 : 0;
+    const x = clamp(xScale(record.recommend_timestamp) + offsetUnit, margin.left + 6, chartWidth - margin.right - 6);
+    const y = yScale(record.return_rate);
+    return { ...record, x, y };
+  });
+
+  const yTicks = buildTickValues(minY, maxY, 5);
+  const xTickCount = Math.min(8, chartRecords.length);
+  const xTicks = buildTickValues(rawMinX, rawMaxX, xTickCount).map((value) => {
+    const date = new Date(value);
+    const yyyy = date.getUTCFullYear();
+    const mm = String(date.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(date.getUTCDate()).padStart(2, "0");
+    return { value, label: `${mm}-${dd}`, fullLabel: `${yyyy}-${mm}-${dd}` };
+  });
+
+  const zeroY = yScale(0);
+  const averageY = yScale(averageReturn);
+  const recentPriorityMap = new Map(
+    [...chartRecords]
+      .sort((a, b) => {
+        if (a.recommend_timestamp !== b.recommend_timestamp) {
+          return b.recommend_timestamp - a.recommend_timestamp;
+        }
+        return a.id.localeCompare(b.id);
+      })
+      .map((record, index) => [record.id, chartRecords.length - index]),
+  );
+
+  const pointHitboxes = positionedRecords.map((record) => ({
+    id: record.id,
+    x: record.x,
+    y: record.y,
+  }));
+
+  const labelCandidates = positionedRecords.map((record) => {
+    const labelText = `${record.name || record.symbol} ${formatSignedPercent(record.return_rate)}`;
+    const textWidth = estimateLabelWidth(labelText);
+    const labelWidth = textWidth;
+    const labelHeight = 14;
+    const priority = (recentPriorityMap.get(record.id) || 0) * 1000 + Math.round(Math.abs(record.return_rate) * 100);
+    const candidatePositions = [
+      { dx: 7, dy: -6 - labelHeight, textAnchor: "start" },
+      { dx: 7, dy: 6, textAnchor: "start" },
+      { dx: -7 - labelWidth, dy: -6 - labelHeight, textAnchor: "end" },
+      { dx: -7 - labelWidth, dy: 6, textAnchor: "end" },
+      { dx: -(labelWidth / 2), dy: -10 - labelHeight, textAnchor: "middle" },
+      { dx: -(labelWidth / 2), dy: 10, textAnchor: "middle" },
+    ];
+    const hoverCandidatePositions = [
+      { dx: 11, dy: -10 - labelHeight, textAnchor: "start" },
+      { dx: 11, dy: 10, textAnchor: "start" },
+      { dx: -11 - labelWidth, dy: -10 - labelHeight, textAnchor: "end" },
+      { dx: -11 - labelWidth, dy: 10, textAnchor: "end" },
+      { dx: -(labelWidth / 2), dy: -14 - labelHeight, textAnchor: "middle" },
+      { dx: -(labelWidth / 2), dy: 14, textAnchor: "middle" },
+    ];
+
+    const placed = candidatePositions
+      .map((position) => {
+        const rectX = clamp(
+          record.x + position.dx,
+          margin.left + 2,
+          chartWidth - margin.right - labelWidth - 2,
+        );
+        const rectY = clamp(
+          record.y + position.dy,
+          margin.top + 2,
+          chartHeight - margin.bottom - labelHeight - 2,
+        );
+        const rect = {
+          left: rectX,
+          right: rectX + labelWidth,
+          top: rectY,
+          bottom: rectY + labelHeight,
+        };
+        const overlapsPoint = pointHitboxes.some((point) => {
+          return rectOverlapsPoint(rect, point, point.id === record.id ? 6 : 7);
+        });
+        const textX = position.textAnchor === "start"
+          ? rectX
+          : position.textAnchor === "end"
+            ? rectX + labelWidth
+            : rectX + labelWidth / 2;
+
+        return {
+          rectX,
+          rectY,
+          rect,
+          textX,
+          textY: rectY + 10.5,
+          textAnchor: position.textAnchor,
+          overlapsPoint,
+        };
+      })
+      .find((position) => !position.overlapsPoint)
+      || (() => {
+        const fallback = candidatePositions[0];
+        const rectX = clamp(
+          record.x + fallback.dx,
+          margin.left + 2,
+          chartWidth - margin.right - labelWidth - 2,
+        );
+        const rectY = clamp(
+          record.y + fallback.dy,
+          margin.top + 2,
+          chartHeight - margin.bottom - labelHeight - 2,
+        );
+        return {
+          rectX,
+          rectY,
+          rect: {
+            left: rectX,
+            right: rectX + labelWidth,
+            top: rectY,
+            bottom: rectY + labelHeight,
+          },
+          textX: rectX,
+          textY: rectY + 10.5,
+          textAnchor: "start",
+          overlapsPoint: true,
+        };
+      })();
+
+    const hoverPlaced = hoverCandidatePositions
+      .map((position) => {
+        const rectX = clamp(
+          record.x + position.dx,
+          margin.left + 2,
+          chartWidth - margin.right - labelWidth - 2,
+        );
+        const rectY = clamp(
+          record.y + position.dy,
+          margin.top + 2,
+          chartHeight - margin.bottom - labelHeight - 2,
+        );
+        const rect = {
+          left: rectX,
+          right: rectX + labelWidth,
+          top: rectY,
+          bottom: rectY + labelHeight,
+        };
+        const overlapsOtherPoint = pointHitboxes.some((point) => {
+          if (point.id === record.id) {
+            return false;
+          }
+          return rectOverlapsPoint(rect, point, 7);
+        });
+        const textX = position.textAnchor === "start"
+          ? rectX
+          : position.textAnchor === "end"
+            ? rectX + labelWidth
+            : rectX + labelWidth / 2;
+
+        return {
+          rectX,
+          rectY,
+          textX,
+          textY: rectY + 10.5,
+          textAnchor: position.textAnchor,
+          overlapsOtherPoint,
+        };
+      })
+      .find((position) => !position.overlapsOtherPoint)
+      || {
+        rectX: placed.rectX,
+        rectY: placed.rectY,
+        textX: placed.textX,
+        textY: placed.textY,
+        textAnchor: placed.textAnchor,
+        overlapsOtherPoint: placed.overlapsPoint,
+      };
+
+    return {
+      id: record.id,
+      labelText,
+      labelWidth,
+      labelHeight,
+      rectX: placed.rectX,
+      rectY: placed.rectY,
+      rect: placed.rect,
+      textX: placed.textX,
+      textY: placed.textY,
+      textAnchor: placed.textAnchor,
+      priority,
+      hidden: false,
+      overlapsPoint: placed.overlapsPoint,
+      hoverRectX: hoverPlaced.rectX,
+      hoverRectY: hoverPlaced.rectY,
+      hoverTextX: hoverPlaced.textX,
+      hoverTextY: hoverPlaced.textY,
+      hoverTextAnchor: hoverPlaced.textAnchor,
+      hoverSafe: !hoverPlaced.overlapsOtherPoint,
+      toneClass: metricClass(record.return_rate),
+    };
+  });
+
+  const occupiedRects = [];
+  const sortedCandidates = [...labelCandidates].sort((a, b) => {
+    if (b.priority !== a.priority) {
+      return b.priority - a.priority;
+    }
+    return a.id.localeCompare(b.id);
+  });
+
+  for (const candidate of sortedCandidates) {
+    const overlapsLabel = occupiedRects.some((rect) => rectsOverlap(candidate.rect, rect));
+
+    if (candidate.overlapsPoint || overlapsLabel) {
+      candidate.hidden = true;
+      continue;
+    }
+
+    occupiedRects.push(candidate.rect);
+  }
+
+  const labelMap = new Map(labelCandidates.map((candidate) => [candidate.id, candidate]));
+
+  timelineChart.innerHTML = `
+    <div class="chart-meta">
+      <div class="chart-legend">
+        <span class="legend-item"><span class="legend-dot profit-dot"></span>盈利</span>
+        <span class="legend-item"><span class="legend-dot loss-dot"></span>亏损</span>
+        <span class="legend-item"><span class="legend-line"></span>平均收益 ${formatSignedPercent(averageReturn)}</span>
+      </div>
+    </div>
+    <div class="chart-scroll">
+      <svg class="timeline-svg" viewBox="0 0 ${chartWidth} ${chartHeight}" role="img" aria-label="推荐事件收益时间线散点图">
+        <g class="chart-grid">
+          ${yTicks
+            .map((tickValue) => {
+              const y = yScaleFromCompressed(tickValue);
+              return `
+                <line x1="${margin.left}" y1="${y}" x2="${chartWidth - margin.right}" y2="${y}" class="chart-grid-line" />
+                <text x="${margin.left - 12}" y="${y + 4}" text-anchor="end" class="chart-axis-text">${escapeHtml(formatSignedPercent(expandCompressedReturn(tickValue)))}</text>
+              `;
+            })
+            .join("")}
+          ${xTicks
+            .map((tick) => {
+              const x = xScale(tick.value);
+              return `
+                <line x1="${x}" y1="${margin.top}" x2="${x}" y2="${chartHeight - margin.bottom}" class="chart-grid-line chart-grid-line-vertical" />
+                <text x="${x}" y="${chartHeight - margin.bottom + 24}" text-anchor="middle" class="chart-axis-text" title="${tick.fullLabel}">${tick.label}</text>
+              `;
+            })
+            .join("")}
+        </g>
+        <line x1="${margin.left}" y1="${zeroY}" x2="${chartWidth - margin.right}" y2="${zeroY}" class="chart-zero-line" />
+        <line x1="${margin.left}" y1="${averageY}" x2="${chartWidth - margin.right}" y2="${averageY}" class="chart-average-line" />
+        ${positionedRecords
+          .map((record) => {
+            const label = labelMap.get(record.id);
+            if (!label) {
+              return "";
+            }
+
+            return `
+              <g
+                class="chart-label-group${label.hidden ? " hidden" : ""}"
+                data-label-id="${escapeHtml(record.id)}"
+                data-overlaps-point="${label.overlapsPoint ? "true" : "false"}"
+                data-hover-safe="${label.hoverSafe ? "true" : "false"}"
+              >
+                <text
+                  x="${label.textX}"
+                  y="${label.textY}"
+                  text-anchor="${label.textAnchor}"
+                  data-base-x="${label.textX}"
+                  data-base-y="${label.textY}"
+                  data-base-anchor="${label.textAnchor}"
+                  data-hover-x="${label.hoverTextX}"
+                  data-hover-y="${label.hoverTextY}"
+                  data-hover-anchor="${label.hoverTextAnchor}"
+                  class="chart-label-text ${label.toneClass}"
+                >${escapeHtml(label.labelText)}</text>
+              </g>
+            `;
+          })
+          .join("")}
+        ${positionedRecords
+          .map((record) => {
+            const pointClass = record.return_rate >= 0 ? "profit-point" : "loss-point";
+            const label = labelMap.get(record.id);
+
+            return `
+              <circle
+                cx="${record.x}"
+                cy="${record.y}"
+                r="5.5"
+                class="chart-point ${pointClass}"
+                data-symbol="${escapeHtml(record.symbol)}"
+                data-name="${escapeHtml(record.name || "--")}"
+                data-recommend-date="${escapeHtml(formatTooltipDate(record.recommend_date))}"
+                data-return-rate="${escapeHtml(tooltipMetricText(record.return_rate))}"
+                data-return-rate-value="${record.return_rate}"
+                data-return-five-day="${escapeHtml(tooltipMetricText(record.return_5d))}"
+                data-return-five-day-value="${record.return_5d ?? ""}"
+                data-return-ten-day="${escapeHtml(tooltipMetricText(record.return_10d))}"
+                data-return-ten-day-value="${record.return_10d ?? ""}"
+                data-return-twenty-day="${escapeHtml(tooltipMetricText(record.return_20d))}"
+                data-return-twenty-day-value="${record.return_20d ?? ""}"
+                data-id="${escapeHtml(record.id)}"
+                data-label-id="${escapeHtml(record.id)}"
+                data-label-text="${escapeHtml(label?.labelText || "")}"
+                data-label-tone-class="${escapeHtml(label?.toneClass || "neutral-text")}"
+                data-label-visible="${label && !label.hidden ? "true" : "false"}"
+                data-hover-x="${label?.hoverTextX ?? ""}"
+                data-hover-y="${label?.hoverTextY ?? ""}"
+                data-hover-anchor="${escapeHtml(label?.hoverTextAnchor || "start")}"
+              ></circle>
+            `;
+          })
+          .join("")}
+        <g id="chart-hover-label-layer" class="chart-hover-label-layer hidden"></g>
+      </svg>
+    </div>
+  `;
+}
+
+function hideChartTooltip() {
+  chartTooltip.classList.add("hidden");
+  activeTooltipId = null;
+}
+
+function hideHoverLabelOverlay() {
+  const hoverLayer = timelineChart.querySelector("#chart-hover-label-layer");
+  if (!hoverLayer) {
+    return;
+  }
+  hoverLayer.innerHTML = "";
+  hoverLayer.classList.add("hidden");
+}
+
+function showHoverLabelOverlay(point) {
+  const hoverLayer = timelineChart.querySelector("#chart-hover-label-layer");
+  if (!hoverLayer) {
+    return;
+  }
+
+  const {
+    labelText = "",
+    labelToneClass = "neutral-text",
+    hoverX = "",
+    hoverY = "",
+    hoverAnchor = "start",
+  } = point.dataset;
+
+  if (!labelText || hoverX === "" || hoverY === "") {
+    hideHoverLabelOverlay();
+    return;
+  }
+
+  hoverLayer.innerHTML = `
+    <text
+      x="${escapeHtml(hoverX)}"
+      y="${escapeHtml(hoverY)}"
+      text-anchor="${escapeHtml(hoverAnchor)}"
+      class="chart-label-text chart-hover-label-text ${escapeHtml(labelToneClass)}"
+    >${escapeHtml(labelText)}</text>
+  `;
+  hoverLayer.classList.remove("hidden");
+}
+
+function setActiveChartLabel(labelId) {
+  if (activeChartLabelId === labelId) {
+    return;
+  }
+
+  if (activeChartLabelId) {
+    const prevLabel = timelineChart.querySelector(`[data-label-id="${CSS.escape(activeChartLabelId)}"]`);
+    const prevPoint = timelineChart.querySelector(`.chart-point[data-label-id="${CSS.escape(activeChartLabelId)}"]`);
+    prevLabel?.classList.remove("active");
+    prevPoint?.classList.remove("active");
+  }
+  hideHoverLabelOverlay();
+
+  activeChartLabelId = labelId;
+
+  if (!labelId) {
+    return;
+  }
+
+  const nextLabel = timelineChart.querySelector(`[data-label-id="${CSS.escape(labelId)}"]`);
+  const nextPoint = timelineChart.querySelector(`.chart-point[data-label-id="${CSS.escape(labelId)}"]`);
+  const labelVisible = nextPoint?.dataset.labelVisible === "true";
+  if (labelVisible) {
+    nextLabel.classList.add("active");
+  } else {
+    showHoverLabelOverlay(nextPoint);
+  }
+  nextPoint?.classList.add("active");
+}
+
+function positionChartTooltip(event) {
+  const offset = 14;
+  const tooltipRect = chartTooltip.getBoundingClientRect();
+  const roomOnRight = window.innerWidth - event.clientX - offset - 12;
+  const roomBelow = window.innerHeight - event.clientY - offset - 12;
+
+  const preferredLeft = roomOnRight >= tooltipRect.width
+    ? event.clientX + offset
+    : event.clientX - tooltipRect.width - offset;
+  const preferredTop = roomBelow >= tooltipRect.height
+    ? event.clientY + offset
+    : event.clientY - tooltipRect.height - offset;
+
+  const maxLeft = window.innerWidth - tooltipRect.width - 12;
+  const maxTop = window.innerHeight - tooltipRect.height - 12;
+  const left = clamp(preferredLeft, 12, maxLeft);
+  const top = clamp(preferredTop, 12, maxTop);
+
+  chartTooltip.style.left = `${left}px`;
+  chartTooltip.style.top = `${top}px`;
+}
+
+function renderChartTooltip(target) {
+  const {
+    symbol = "--",
+    name = "--",
+    recommendDate = "--",
+    returnRate = "--",
+    returnFiveDay = "--",
+    returnTenDay = "--",
+    returnTwentyDay = "--",
+    returnRateValue = "",
+    returnFiveDayValue = "",
+    returnTenDayValue = "",
+    returnTwentyDayValue = "",
+  } = target.dataset;
+
+  const tooltipKey = `${symbol}-${recommendDate}-${returnRate}`;
+  if (activeTooltipId === tooltipKey && !chartTooltip.classList.contains("hidden")) {
+    return;
+  }
+
+  const parsedReturnRate = returnRateValue === "" ? null : Number(returnRateValue);
+  const parsedReturn5d = returnFiveDayValue === "" ? null : Number(returnFiveDayValue);
+  const parsedReturn10d = returnTenDayValue === "" ? null : Number(returnTenDayValue);
+  const parsedReturn20d = returnTwentyDayValue === "" ? null : Number(returnTwentyDayValue);
+
+  chartTooltip.innerHTML = `
+    <div class="chart-tooltip-title">${escapeHtml(symbol)} ${escapeHtml(name)}</div>
+    <div class="chart-tooltip-row"><span>推荐日期</span><strong>${escapeHtml(recommendDate)}</strong></div>
+    <div class="chart-tooltip-row"><span>当前收益</span><strong class="${tooltipMetricClass(parsedReturnRate)}">${escapeHtml(returnRate)}</strong></div>
+    <div class="chart-tooltip-row"><span>5日收益</span><strong class="${tooltipMetricClass(parsedReturn5d)}">${escapeHtml(returnFiveDay)}</strong></div>
+    <div class="chart-tooltip-row"><span>10日收益</span><strong class="${tooltipMetricClass(parsedReturn10d)}">${escapeHtml(returnTenDay)}</strong></div>
+    <div class="chart-tooltip-row"><span>20日收益</span><strong class="${tooltipMetricClass(parsedReturn20d)}">${escapeHtml(returnTwentyDay)}</strong></div>
+  `;
+  chartTooltip.classList.remove("hidden");
+  activeTooltipId = tooltipKey;
 }
 
 function stockSummaryMap(records) {
@@ -366,6 +985,7 @@ function syncViewButtons() {
 }
 
 function renderFilteredViews(records) {
+  renderTimelineChart(records);
   renderTable(records);
   renderGroupedView(records);
   syncViewButtons();
@@ -492,3 +1112,25 @@ loadData().catch((error) => {
     </article>
   `;
 });
+
+timelineChart.addEventListener("mousemove", (event) => {
+  const point = event.target.closest(".chart-point");
+  if (!point) {
+    setActiveChartLabel(null);
+    hideChartTooltip();
+    return;
+  }
+
+  setActiveChartLabel(point.dataset.labelId || null);
+  renderChartTooltip(point);
+  positionChartTooltip(event);
+});
+
+timelineChart.addEventListener("mouseleave", () => {
+  setActiveChartLabel(null);
+  hideChartTooltip();
+});
+window.addEventListener("scroll", () => {
+  setActiveChartLabel(null);
+  hideChartTooltip();
+}, { passive: true });
