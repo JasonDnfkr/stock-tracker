@@ -17,6 +17,8 @@ import urllib.request
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
+from zoneinfo import ZoneInfo
+
 
 
 YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
@@ -457,7 +459,8 @@ def main() -> int:
   records.sort(key=lambda item: item["recommend_date"], reverse=True)
   stock_summaries = build_stock_summaries(records)
   payload = {
-    "generated_at": dt.datetime.now(dt.timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M:%S %Z"),
+    "generated_at": dt.datetime.now(ZoneInfo("Asia/Shanghai"))
+    .strftime("%Y-%m-%d %H:%M:%S"),
     "summary": build_summary(records),
     "records": records,
     "stock_summaries": stock_summaries,
