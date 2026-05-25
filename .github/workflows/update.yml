@@ -1,56 +1,47 @@
-name: Update Stock Data
+name: Update Stock Metrics
 
 on:
   schedule:
-    # 上午盘
-    - cron: '0,30 1-2 * * 1-5'
-    - cron: '0,30 3 * * 1-5'
-
-    # 下午盘
-    - cron: '0,30 5-6 * * 1-5'
-    - cron: '0 7 * * 1-5'
-
+    # 北京时间工作日 09:00 / 09:30 / 10:00 / 10:30
+    - cron: "0,33 1-2 * * 1-5"
+    # 北京时间工作日 11:00 / 11:30
+    - cron: "0,33 3 * * 1-5"
+    # 北京时间工作日 13:00 / 13:30 / 14:00 / 14:30
+    - cron: "0,33 5-6 * * 1-5"
+    # 北京时间工作日 15:00
+    - cron: "0 7 * * 1-5"
   workflow_dispatch:
 
+permissions:
+  contents: write
+
+concurrency:
+  group: "update-metrics"
+  cancel-in-progress: true
+
 jobs:
-  update-stock:
+  update-metrics:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. 拉代码
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 2. 安装 Python
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
-      # 3. 安装依赖
-      - name: Install dependencies
-        run: |
-          pip install yfinance pandas
+      - name: Refresh metrics
+        run: python scripts/update_data.py
 
-      # 4. 运行脚本
-      - name: Run stock updater
-        run: |
-          cd scripts
-          python fetch_prices.py
-
-      # 5. 自动提交
-      - name: Commit files
+      - name: Commit metrics changes
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "github-actions"
+          git add docs/data/metrics.json
 
-          git add public/data/enriched.json
+          git diff --staged --quiet || git commit -m "auto update stock metrics"
 
-          git diff --staged --quiet || git commit -m "auto update stock data"
-
-      # 6. 推送回 GitHub
       - name: Push changes
-        uses: ad-m/github-push-action@master
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          branch: main
+        run: git push
