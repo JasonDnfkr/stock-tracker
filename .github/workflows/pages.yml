@@ -1,26 +1,57 @@
-name: Build And Deploy Pages
+name: Update And Deploy Pages
 
 on:
   push:
     branches:
       - main
+  schedule:
+    # 北京时间工作日 09:00 / 09:33 / 10:00 / 10:33
+    - cron: "0,33 1-2 * * 1-5"
+    # 北京时间工作日 11:00 / 11:33
+    - cron: "0,33 3 * * 1-5"
+    # 北京时间工作日 13:00 / 13:33 / 14:00 / 14:33
+    - cron: "0,33 5-6 * * 1-5"
+    # 北京时间工作日 15:00
+    - cron: "0 7 * * 1-5"
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
 concurrency:
-  group: "pages"
+  group: "update-deploy-pages"
   cancel-in-progress: true
 
 jobs:
   build:
+    if: github.event_name != 'push' || github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Refresh stock metrics
+        run: python scripts/update_data.py
+
+      - name: Commit metrics changes
+        if: github.event_name != 'push'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "github-actions"
+          git add docs/data/metrics.json
+
+          git diff --staged --quiet || git commit -m "auto update stock metrics"
+
+      - name: Push changes
+        if: github.event_name != 'push'
+        run: git push
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

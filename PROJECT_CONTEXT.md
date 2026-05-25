@@ -341,11 +341,33 @@ tradeoff：
 
 负责：
 
+- 当前唯一的 GitHub Actions 工作流
 - push 到 `main` 时触发
 - `workflow_dispatch` 手动触发
-- `schedule` 定时触发，当前 `cron: "10 10 * * *"`，即北京时间每天 `18:10`
+- `schedule` 定时触发
 - 执行 `python scripts/update_data.py`
+- 定时/手动触发时自动提交并 `git push` 最新 `docs/data/metrics.json`
 - 上传 `docs/` 为 Pages artifact 并部署
+
+当前 schedule（UTC）：
+
+- `0,33 1-2 * * 1-5`
+- `0,33 3 * * 1-5`
+- `0,33 5-6 * * 1-5`
+- `0 7 * * 1-5`
+
+对应北京时间工作日：
+
+- `09:00 / 09:33 / 10:00 / 10:33`
+- `11:00 / 11:33`
+- `13:00 / 13:33 / 14:00 / 14:33`
+- `15:00`
+
+关键现状：
+
+- 不再存在单独的 `.github/workflows/update.yml`
+- `pages.yml` 已经合并了“更新数据”和“部署页面”两项职责
+- 为避免定时任务 `git push` 后再次触发 workflow 死循环，job 上有 bot push 保护判断
 
 ### `docs/index.html`
 
@@ -553,13 +575,16 @@ CLI contract：
 最近主要修改的是：
 
 - `PROJECT_CONTEXT.md`
+- `.github/workflows/pages.yml`
+- `.github/workflows/update.yml`（已删除）
 - `docs/app.js`
 - `docs/styles.css`
 
 说明：
 
-- 最近这一轮几乎全部是散点图与标签交互迭代
+- 最近这一轮除了散点图交互迭代，还做了 workflow 合并
 - `docs/app.js` / `docs/styles.css` 是这轮前端迭代的主战场
+- workflow 现在只剩 `.github/workflows/pages.yml`
 - `docs/data/metrics.json` 仍然是生成产物，不要把它误当作手工源数据
 
 
@@ -789,6 +814,7 @@ node --check docs/app.js
 - 页面依赖浏览器直接 `fetch("./data/metrics.json")`
 - 因为 `fetch` 限制，不要直接双击 `docs/index.html` 做本地预览
 - 图表和标签逻辑目前全部是原生 DOM + 原生 SVG，没有引入任何图表库
+- GitHub Actions 当前只有一个 workflow：`.github/workflows/pages.yml`
 
 
 # 9. 给下一位 agent 的重要提醒
@@ -818,3 +844,5 @@ node --check docs/app.js
 - 如果以后继续改 label 布局，不要把“边缘点 hover 也要显示 label”这个要求弄丢
 - 如果以后继续改 hover 交互，不要把“默认已显示 label hover 时不应跳位”这个要求弄丢
 - 当前 label 已经被改成纯文字，没有背景块和边框；如果重新加底板，大概率会再次被用户否掉
+- workflow 结构最近刚改过：不要再基于旧理解以为有独立的 `update.yml`
+- 当前 `pages.yml` 既负责 schedule 更新，也负责部署；如果后续再拆分，必须重新评估 bot push 循环触发问题
