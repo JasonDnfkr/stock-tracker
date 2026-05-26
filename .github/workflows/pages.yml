@@ -1,16 +1,22 @@
 name: Update And Deploy Pages
+run-name: >-
+  ${{
+    github.event_name == 'schedule' && format('Scheduled update at {0}', github.event.schedule) ||
+    github.event_name == 'workflow_dispatch' && 'Manual update and deploy' ||
+    format('Push deploy by {0}', github.actor)
+  }}
 
 on:
   push:
     branches:
       - main
   schedule:
-    # 北京时间工作日 09:00 / 09:33 / 10:00 / 10:33
-    - cron: "0,33 1-2 * * 1-5"
-    # 北京时间工作日 11:00 / 11:33
-    - cron: "0,33 3 * * 1-5"
-    # 北京时间工作日 13:00 / 13:33 / 14:00 / 14:33
-    - cron: "0,33 5-6 * * 1-5"
+    # 北京时间工作日 09:00 / 09:30 / 10:00 / 10:30
+    - cron: "0,30 1-2 * * 1-5"
+    # 北京时间工作日 11:00 / 11:30
+    - cron: "0,30 3 * * 1-5"
+    # 北京时间工作日 13:00 / 13:30 / 14:00 / 14:30
+    - cron: "0,30 5-6 * * 1-5"
     # 北京时间工作日 15:00
     - cron: "0 7 * * 1-5"
   workflow_dispatch:
@@ -32,12 +38,27 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Show trigger context
+        run: |
+          echo "event_name=${{ github.event_name }}"
+          echo "actor=${{ github.actor }}"
+          echo "ref=${{ github.ref }}"
+          echo "sha=${{ github.sha }}"
+          echo "schedule=${{ github.event.schedule || 'n/a' }}"
+
+      - name: Show UTC and Beijing time
+        run: |
+          echo "UTC: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          TZ=Asia/Shanghai date '+Beijing: %Y-%m-%d %H:%M:%S CST'
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Refresh stock metrics
+        env:
+          REFRESH_TRIGGER: ${{ github.event_name }}
         run: python scripts/update_data.py
 
       - name: Commit metrics changes

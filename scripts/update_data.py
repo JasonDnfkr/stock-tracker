@@ -7,6 +7,7 @@ import csv
 import datetime as dt
 import json
 import math
+import os
 import re
 import statistics
 import sys
@@ -384,6 +385,22 @@ def average(values: list[float | None]) -> float | None:
   return round(statistics.fmean(valid), 6)
 
 
+def refresh_context(now: dt.datetime) -> dict:
+  trigger = (os.environ.get("REFRESH_TRIGGER") or "local").strip().lower()
+  trigger_map = {
+    "schedule": "定时触发",
+    "workflow_dispatch": "手动触发",
+    "push": "推送触发",
+    "local": "本地刷新",
+  }
+
+  return {
+    "trigger": trigger,
+    "trigger_label": trigger_map.get(trigger, trigger or "未知触发"),
+    "generated_at": now.strftime("%Y-%m-%d %H:%M:%S"),
+  }
+
+
 def build_summary(records: list[dict]) -> dict:
   total = len(records)
   profitable = sum(1 for record in records if record.get("is_profitable"))
@@ -458,9 +475,11 @@ def main() -> int:
   annotate_recommendation_sequences(records)
   records.sort(key=lambda item: item["recommend_date"], reverse=True)
   stock_summaries = build_stock_summaries(records)
+  now = dt.datetime.now(ZoneInfo("Asia/Shanghai"))
+  context = refresh_context(now)
   payload = {
-    "generated_at": dt.datetime.now(ZoneInfo("Asia/Shanghai"))
-    .strftime("%Y-%m-%d %H:%M:%S"),
+    "generated_at": context["generated_at"],
+    "refresh_context": context,
     "summary": build_summary(records),
     "records": records,
     "stock_summaries": stock_summaries,

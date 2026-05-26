@@ -1,5 +1,10 @@
 {
-  "generated_at": "2026-05-26 12:39:15",
+  "generated_at": "2026-05-26 12:47:48",
+  "refresh_context": {
+    "trigger": "local",
+    "trigger_label": "本地刷新",
+    "generated_at": "2026-05-26 12:47:48"
+  },
   "summary": {
     "total_picks": 19,
     "unique_symbols": 17,

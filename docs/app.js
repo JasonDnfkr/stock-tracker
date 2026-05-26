@@ -1082,7 +1082,10 @@ async function loadData() {
   renderFilteredViews(allRecords);
   renderPendingRecords(data.pending_records || []);
   renderFailures(data.failures || []);
-  updatedAt.textContent = `最近更新：${data.generated_at || "--"}`;
+  const refreshContext = data.refresh_context || {};
+  const generatedAt = refreshContext.generated_at || data.generated_at || "--";
+  const triggerLabel = refreshContext.trigger_label || "未知触发";
+  updatedAt.textContent = `最近更新：${generatedAt} · ${triggerLabel}`;
 }
 
 searchInput.addEventListener("input", applyFilter);
