@@ -80,6 +80,8 @@ def parse_symbol(symbol_text: str) -> str:
         return normalized[:-3]
     if normalized.endswith(".SZ"):
         return normalized[:-3]
+    if normalized.endswith(".HK"):
+        return normalized[:-3]
     return normalized
 
 
@@ -230,7 +232,13 @@ def build_parser() -> argparse.ArgumentParser:
     list_parser.set_defaults(func=cmd_list)
 
     add_parser = subparsers.add_parser("add", help="Add one recommendation record")
-    add_parser.add_argument("--code", "--symbol", dest="code", required=True, help="A-share code, e.g. 600519 or 000001")
+    add_parser.add_argument(
+        "--code",
+        "--symbol",
+        dest="code",
+        required=True,
+        help="A-share or HK code, e.g. 600519, 000001, 0700, 0005, 0700.HK",
+    )
     add_parser.add_argument("--name", required=True, help="Stock name")
     add_parser.add_argument("--recommend-date", required=True, help="Recommend date in YYYY-MM-DD")
     add_parser.add_argument("--note", default="", help="Optional note")
@@ -244,7 +252,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     update_parser = subparsers.add_parser("update", help="Update one recommendation record by id")
     update_parser.add_argument("--id", required=True, help="Recommendation id")
-    update_parser.add_argument("--code", "--symbol", dest="code", help="New stock code")
+    update_parser.add_argument("--code", "--symbol", dest="code", help="New A-share or HK stock code")
     update_parser.add_argument("--name", help="New stock name")
     update_parser.add_argument("--recommend-date", help="New date in YYYY-MM-DD")
     update_parser.add_argument("--note", help="New note")

@@ -50,10 +50,21 @@ def normalize_symbol(raw_symbol: str) -> str:
     if symbol.startswith(("0", "2", "3")):
       return f"{symbol}.SZ"
 
+  if re.fullmatch(r"\d{1,5}", symbol):
+    return f"{symbol.zfill(4) if len(symbol) < 4 else symbol}.HK"
+
   if symbol.endswith(".SH"):
     return symbol[:-3] + ".SS"
 
+  if symbol.endswith(".HK"):
+    code = symbol[:-3]
+    if re.fullmatch(r"\d{1,5}", code):
+      return f"{code.zfill(4) if len(code) < 4 else code}.HK"
+
   if re.fullmatch(r"\d{6}\.(SS|SZ)", symbol):
+    return symbol
+
+  if re.fullmatch(r"\d{4,5}\.HK", symbol):
     return symbol
 
   return symbol
@@ -61,9 +72,9 @@ def normalize_symbol(raw_symbol: str) -> str:
 
 def validate_symbol(raw_symbol: str) -> str:
   normalized = normalize_symbol(raw_symbol)
-  if re.fullmatch(r"\d{6}\.(SS|SZ)", normalized):
+  if re.fullmatch(r"\d{6}\.(SS|SZ)", normalized) or re.fullmatch(r"\d{4,5}\.HK", normalized):
     return normalized
-  raise ValueError("Invalid A-share symbol format")
+  raise ValueError("Invalid A-share or HK symbol format")
 
 
 def sanitize_id(raw_id: str) -> str:

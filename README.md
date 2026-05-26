@@ -3,7 +3,7 @@
 这是一个不依赖自购服务器的静态小项目：
 
 - 你维护推荐记录
-- `scripts/update_data.py` 抓取 A 股日线并计算指标
+- `scripts/update_data.py` 抓取 A 股 / 港股日线并计算指标
 - GitHub Actions 自动刷新 `docs/data/metrics.json`
 - GitHub Pages 直接展示网页
 
@@ -29,7 +29,7 @@ python3 scripts/manage_recommendations.py remove --id 20260525-600519-1 --refres
 
 说明：
 
-- `--code` 是主要参数名，填 6 位 A 股代码即可
+- `--code` 是主要参数名，支持 A 股和港股代码
 - `--refresh` 会顺手执行一次 `scripts/update_data.py`
 - 工具会自动生成 `id`，你不需要手工维护
 
@@ -57,8 +57,10 @@ id,symbol,name,recommend_date,note
 - CSV 行可以乱序，脚本会自动按日期和 `id` 排序写回
 - 同一只股票允许多次出现
 - 同一天同一只股票出现多次时，会自动生成不同的事件 `id`
-- 支持直接填 `600519`、`000001`、`300750`
-- 也兼容 `600519.SH`、`600519.SS`、`000001.SZ`
+- 支持直接填 A 股代码：`600519`、`000001`、`300750`
+- 也兼容 A 股后缀：`600519.SH`、`600519.SS`、`000001.SZ`
+- 支持直接填港股代码：`0700`、`0005`、`1810`
+- 也兼容港股后缀：`0700.HK`、`0005.HK`
 
 ## 页面现在展示什么
 
