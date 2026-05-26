@@ -218,20 +218,37 @@ function expandCompressedReturn(value) {
 
 function renderSummary(summary) {
   const cards = [
-    ["推荐总数", summary.total_picks, ""],
-    ["覆盖股票数", summary.unique_symbols, ""],
-    ["当前盈利数", summary.profitable_picks, ""],
-    ["当前胜率", formatPercent(summary.win_rate), ""],
-    ["平均收益率", formatSignedPercent(summary.average_return), metricClass(summary.average_return)],
-    ["平均 5 日收益", formatSignedPercent(summary.average_return_5d), metricClass(summary.average_return_5d)],
-    ["平均 10 日收益", formatSignedPercent(summary.average_return_10d), metricClass(summary.average_return_10d)],
+    { label: "推荐总数", value: summary.total_picks, valueClass: "", hint: "" },
+    { label: "覆盖股票数", value: summary.unique_symbols, valueClass: "", hint: "" },
+    { label: "当前盈利数", value: summary.profitable_picks, valueClass: "", hint: "" },
+    { label: "当前胜率", value: formatPercent(summary.win_rate), valueClass: "", hint: "" },
+    {
+      label: "平均收益率",
+      value: formatSignedPercent(summary.average_return),
+      valueClass: metricClass(summary.average_return),
+      hint: "按全部推荐事件的当前收益率直接平均；同一只股票多次推荐会分别计入。",
+    },
+    { label: "平均 5 日收益", value: formatSignedPercent(summary.average_return_5d), valueClass: metricClass(summary.average_return_5d), hint: "" },
+    { label: "平均 10 日收益", value: formatSignedPercent(summary.average_return_10d), valueClass: metricClass(summary.average_return_10d), hint: "" },
   ];
 
   summaryGrid.innerHTML = cards
     .map(
-      ([label, value, valueClass]) => `
+      ({ label, value, valueClass, hint }) => `
         <article class="metric-card">
-          <p class="metric-label">${label}</p>
+          <p class="metric-label">
+            <span>${label}</span>
+            ${
+              hint
+                ? `
+                  <span class="metric-hint-wrap">
+                    <span class="metric-hint-trigger" tabindex="0" aria-label="${escapeHtml(hint)}">i</span>
+                    <span class="metric-hint-bubble" role="tooltip">${escapeHtml(hint)}</span>
+                  </span>
+                `
+                : ""
+            }
+          </p>
           <p class="metric-value ${valueClass}">${value ?? "--"}</p>
         </article>
       `,

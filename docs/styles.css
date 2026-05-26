@@ -424,8 +424,60 @@ h1 {
 }
 
 .metric-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   color: var(--muted);
   font-size: 0.92rem;
+}
+
+.metric-hint-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.metric-hint-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid rgba(110, 23, 33, 0.16);
+  background: rgba(98, 19, 34, 0.05);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: help;
+}
+
+.metric-hint-bubble {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  transform: translateX(-50%);
+  width: 220px;
+  padding: 9px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(110, 23, 33, 0.12);
+  background: rgba(255, 252, 251, 0.97);
+  box-shadow: 0 14px 28px rgba(83, 16, 27, 0.12);
+  color: var(--text);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+  z-index: 6;
+}
+
+.metric-hint-wrap:hover .metric-hint-bubble,
+.metric-hint-wrap:focus-within .metric-hint-bubble {
+  opacity: 1;
+  visibility: visible;
 }
 
 .metric-value {
