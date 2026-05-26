@@ -5,6 +5,7 @@ const recordsBody = document.getElementById("records-body");
 const stockGroupList = document.getElementById("stock-group-list");
 const updatedAt = document.getElementById("updated-at");
 const searchInput = document.getElementById("search-input");
+const timelineRangeControls = document.getElementById("timeline-range-controls");
 const emptyState = document.getElementById("empty-state");
 const groupedEmptyState = document.getElementById("grouped-empty-state");
 const pendingPanel = document.getElementById("pending-panel");
@@ -22,6 +23,7 @@ document.body.append(chartTooltip);
 
 let allRecords = [];
 let currentView = "grouped";
+let currentTimelineRange = "20d";
 const expandedGroups = new Set();
 let activeTooltipId = null;
 let activeChartLabelId = null;
@@ -237,8 +239,55 @@ function renderSummary(summary) {
     .join("");
 }
 
+function latestRecommendTimestamp(records) {
+  const timestamps = records
+    .map((record) => dateToTimestamp(record.recommend_date))
+    .filter((value) => value !== null);
+
+  if (!timestamps.length) {
+    return null;
+  }
+
+  return Math.max(...timestamps);
+}
+
+function filterTimelineRecords(records) {
+  if (currentTimelineRange === "all") {
+    return records;
+  }
+
+  const days = Number.parseInt(currentTimelineRange, 10);
+  if (Number.isNaN(days)) {
+    return records;
+  }
+
+  const latestTimestamp = latestRecommendTimestamp(allRecords);
+  if (latestTimestamp === null) {
+    return records;
+  }
+
+  const dayMs = 24 * 60 * 60 * 1000;
+  const cutoff = latestTimestamp - (days - 1) * dayMs;
+
+  return records.filter((record) => {
+    const timestamp = dateToTimestamp(record.recommend_date);
+    return timestamp !== null && timestamp >= cutoff;
+  });
+}
+
+function syncTimelineRangeButtons() {
+  if (!timelineRangeControls) {
+    return;
+  }
+
+  for (const button of timelineRangeControls.querySelectorAll("[data-range]")) {
+    button.classList.toggle("active", button.dataset.range === currentTimelineRange);
+  }
+}
+
 function renderTimelineChart(records) {
-  const chartRecords = records
+  const scopedRecords = filterTimelineRecords(records);
+  const chartRecords = scopedRecords
     .filter((record) => record.return_rate !== null && record.return_rate !== undefined)
     .map((record) => ({
       ...record,
@@ -985,6 +1034,7 @@ function syncViewButtons() {
 }
 
 function renderFilteredViews(records) {
+  syncTimelineRangeButtons();
   renderTimelineChart(records);
   renderTable(records);
   renderGroupedView(records);
@@ -1103,6 +1153,15 @@ groupedViewBtn.addEventListener("click", () => {
 eventViewBtn.addEventListener("click", () => {
   currentView = "event";
   syncViewButtons();
+});
+timelineRangeControls?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-range]");
+  if (!button) {
+    return;
+  }
+
+  currentTimelineRange = button.dataset.range || "20d";
+  applyFilter();
 });
 
 loadData().catch((error) => {

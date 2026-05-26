@@ -39,6 +39,12 @@
           </div>
           <div class="summary-grid" id="summary-grid"></div>
           <div class="chart-block">
+            <div class="chart-range-toggle" id="timeline-range-controls" role="tablist" aria-label="时间范围切换">
+              <button class="toggle-btn" type="button" data-range="10d">近10日</button>
+              <button class="toggle-btn active" type="button" data-range="20d">近20日</button>
+              <button class="toggle-btn" type="button" data-range="60d">近60日</button>
+              <button class="toggle-btn" type="button" data-range="all">全部</button>
+            </div>
             <div class="chart-shell" id="timeline-chart"></div>
           </div>
           <div class="chart-empty hidden" id="timeline-empty-state">没有可展示的收益数据。</div>
