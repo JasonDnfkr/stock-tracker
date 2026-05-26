@@ -412,7 +412,8 @@ h1 {
   border: 1px solid rgba(110, 23, 33, 0.08);
   border-radius: 18px;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
+  z-index: 0;
 }
 
 .metric-card::before {
@@ -435,6 +436,7 @@ h1 {
   position: relative;
   display: inline-flex;
   align-items: center;
+  z-index: 3;
 }
 
 .metric-hint-trigger {
@@ -471,7 +473,7 @@ h1 {
   visibility: hidden;
   pointer-events: none;
   transition: opacity 120ms ease;
-  z-index: 6;
+  z-index: 12;
 }
 
 .metric-hint-wrap:hover .metric-hint-bubble,
