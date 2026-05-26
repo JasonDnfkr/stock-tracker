@@ -1112,6 +1112,7 @@ function applyFilter() {
   const filtered = allRecords.filter((record) => {
     return (
       record.symbol.toLowerCase().includes(keyword) ||
+      (record.query_symbol || "").toLowerCase().includes(keyword) ||
       (record.name || "").toLowerCase().includes(keyword)
     );
   });

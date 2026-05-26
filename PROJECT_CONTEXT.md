@@ -2,7 +2,7 @@
 
 ## 当前项目在做什么
 
-这是一个面向 A 股荐股追踪的零服务器静态项目，部署方式是：
+这是一个面向 A 股 / 港股荐股追踪的零服务器静态项目，部署方式是：
 
 - 前端静态页面放在 `docs/`
 - 数据源输入是 `docs/data/recommendations.csv`
@@ -34,7 +34,7 @@
 
 已完成的核心能力：
 
-- A 股代码校验与标准化
+- A 股 / 港股代码校验与标准化
 - `recommendations.csv` 到 `metrics.json` 的完整生成链路
 - GitHub Actions 自动刷新 + GitHub Pages 部署
 - 同一股票多次推荐的独立建模和展示
@@ -51,6 +51,7 @@
   - 推荐事件收益时间线
   - 压缩纵轴
   - 横向滚动
+  - 时间范围切换
   - 常驻标签
   - hover tooltip
   - hover overlay label
@@ -82,6 +83,9 @@
 - 默认隐藏的点 hover 时会单独以 overlay label 形式展示，并置于最上层
 - 边缘点 hover 时也会显示 overlay label
 - 横轴左右边距已加大，最左/最右刻度和点位不再贴边
+- 录入层和抓价层已支持港股代码
+- 页面顶部现在会显示“最近更新时间 + 触发方式”
+- 散点图已支持 `近10日 / 近20日 / 近60日 / 全部` 时间范围切换，默认 `近20日`
 
 ## 哪些方案被否决，以及为什么
 
@@ -117,6 +121,9 @@
 - hover label 仍要求完全安全才显示：
   - 原因：会导致边缘点 hover 时没有 label
   - 结论：边缘点 hover 时直接以上层 overlay label 展示
+- workflow 定时使用 `33` 分而不是整点/半点：
+  - 原因：用户明确要求改回整点/半点
+  - 结论：schedule 已改回 `00 / 30`
 
 
 # 3. 关键架构/设计决策
@@ -219,6 +226,23 @@ tradeoff：
 - `.profit-text` / `.pill.profit` 必须是红色正收益
 - `.loss-text` / `.pill.loss` 必须是绿色负收益
 
+## 设计决策 6.5：底层数据已支持港股，但页面视觉口径仍沿用 A 股风格
+
+为什么这样设计：
+
+- 用户当前先要求的是港股抓价能力，而不是整套 UI 文案重构
+- 港股加入后，现有展示仍可复用，不必立即增加市场字段列
+
+tradeoff：
+
+- 好处：最小改动即可扩展数据覆盖范围
+- 代价：页面标题和部分文案仍偏 A 股口径，和底层能力暂时不完全一致
+
+绝对不能破坏：
+
+- `scripts/update_data.py` / `scripts/manage_recommendations.py` 当前必须继续支持港股代码
+- UI 文案即使暂时未完全改名，也不能再把底层能力改回 A 股 only
+
 ## 设计决策 7：散点图并入概览区，而不是单独再开一个 panel
 
 为什么这样设计：
@@ -288,6 +312,23 @@ tradeoff：
 
 - 散点图 tooltip 当前不要再显示事件 ID，除非用户再次明确要求
 
+## 设计决策 11：散点图默认显示最近窗口，而不是默认全部历史
+
+为什么这样设计：
+
+- 用户反馈股票变多后，顶部图表字体和标签太密
+- 时间范围切换比“只靠横向滚动”更能快速降低密度
+
+tradeoff：
+
+- 好处：默认图表更易读
+- 代价：默认视图不再覆盖全部历史，需要用户主动切换到“全部”
+
+绝对不能破坏：
+
+- 默认 `currentTimelineRange` 当前是 `20d`
+- 图表范围切换只影响顶部散点图，不影响下方表格数据
+
 
 # 4. 当前 blocker / 风险
 
@@ -297,13 +338,14 @@ tradeoff：
 
 ## 潜在风险
 
-- 数据源依赖 Yahoo Finance chart API，若接口限流、改字段或偶发失败，会进入 failures
+- 数据源当前依赖腾讯行情接口；如果接口字段、可用性或盘中返回口径变化，会影响 `metrics.json` 计算结果并进入 failures
 - `metrics.json` 是生成产物，如果修改了 `recommendations.csv` 但没跑 `scripts/update_data.py`，本地页面会和 CSV 不一致
 - GitHub Pages 是静态部署，无法直接在网页前端写入数据
 - 当前没有自动化测试，只做语法和手工页面验证
 - 当前分组折叠状态只保存在前端内存中，刷新页面会丢失
 - 散点图标签布局采用轻量贪心+候选位置策略，不是完整布局引擎；数据量更大时仍可能出现较多隐藏标签
 - hover overlay label 当前允许与其他 label 视觉重叠，只保证位于最上层并靠描边提高可读性
+- 页面顶部“最近更新”依赖 `metrics.json.refresh_context`；如果该字段缺失，前端会回退到旧的 `generated_at`
 
 ## 已知 bug
 
@@ -317,7 +359,8 @@ tradeoff：
 ## 未验证假设
 
 - `Intl.NumberFormat(..., { signDisplay: "exceptZero" })` 在目标浏览器环境下是否都表现一致，没有做兼容性回归
-- Yahoo Finance 对全部 A 股代码的覆盖和稳定性没有做更大样本验证
+- 腾讯行情接口返回的 `qfqday` 在港股盘中是否始终包含“当日未收盘 bar”，尚未做完整时段抽样
+- 当前前复权日线口径在 A 股 / 港股的极端公司行为场景下是否和用户预期完全一致，没有做系统性回归
 - 前端当前紧凑布局在非常窄的移动端上是否仍完全满足用户偏好，没有系统验证
 - 散点图标签的当前候选位置集合，是否已经是用户最满意的布局，尚未最终定稿
 
@@ -351,16 +394,16 @@ tradeoff：
 
 当前 schedule（UTC）：
 
-- `0,33 1-2 * * 1-5`
-- `0,33 3 * * 1-5`
-- `0,33 5-6 * * 1-5`
+- `0,30 1-2 * * 1-5`
+- `0,30 3 * * 1-5`
+- `0,30 5-6 * * 1-5`
 - `0 7 * * 1-5`
 
 对应北京时间工作日：
 
-- `09:00 / 09:33 / 10:00 / 10:33`
-- `11:00 / 11:33`
-- `13:00 / 13:33 / 14:00 / 14:33`
+- `09:00 / 09:30 / 10:00 / 10:30`
+- `11:00 / 11:30`
+- `13:00 / 13:30 / 14:00 / 14:30`
 - `15:00`
 
 关键现状：
@@ -368,6 +411,8 @@ tradeoff：
 - 不再存在单独的 `.github/workflows/update.yml`
 - `pages.yml` 已经合并了“更新数据”和“部署页面”两项职责
 - 为避免定时任务 `git push` 后再次触发 workflow 死循环，job 上有 bot push 保护判断
+- workflow 还会把 `REFRESH_TRIGGER=${{ github.event_name }}` 注入 `update_data.py`
+- workflow 里额外打印 trigger context 以及 UTC / 北京时间，便于排查 schedule 是否真的触发
 
 ### `docs/index.html`
 
@@ -382,6 +427,7 @@ tradeoff：
 - 底部“录入方式” section 也被 `hidden`
 - 分组视图和事件视图都共享单次表头
 - 散点图容器 `#timeline-chart` 现在位于 `summary-panel` 内部，而不是独立 section
+- 散点图时间范围切换容器是 `#timeline-range-controls`
 
 ### `docs/app.js`
 
@@ -402,9 +448,11 @@ tradeoff：
 - `const expandedGroups = new Set()`
 - `const timelineChart = document.getElementById("timeline-chart")`
 - `const timelineEmptyState = document.getElementById("timeline-empty-state")`
+- `const timelineRangeControls = document.getElementById("timeline-range-controls")`
 - `const chartTooltip = document.createElement("div")`
 - `let activeTooltipId = null`
 - `let activeChartLabelId = null`
+- `let currentTimelineRange = "20d"`
 
 关键函数：
 
@@ -429,6 +477,9 @@ tradeoff：
 - `compressReturn(value)`
 - `expandCompressedReturn(value)`
 - `renderSummary(summary)`
+- `latestRecommendTimestamp(records)`
+- `filterTimelineRecords(records)`
+- `syncTimelineRangeButtons()`
 - `renderTimelineChart(records)`
 - `stockSummaryMap(records)`
 - `buildGroupedStocks(records)`
@@ -463,6 +514,15 @@ tradeoff：
 - 边缘点 hover 时也必须显示 label
 - 散点图 tooltip 当前不展示事件 ID
 - 横轴左右两侧有额外 padding，最左/最右刻度和点不要贴边
+- 散点图当前默认范围是 `近20日`
+- 范围切换按钮当前是：
+  - `近10日`
+  - `近20日`
+  - `近60日`
+  - `全部`
+- 顶部时间戳当前显示格式是：
+  - `最近更新：YYYY-MM-DD HH:MM:SS · 定时触发`
+  - 或 `手动触发 / 推送触发 / 本地刷新`
 
 ### `docs/styles.css`
 
@@ -472,6 +532,7 @@ tradeoff：
 - 紧凑表格布局
 - 分组折叠行的视觉弱化
 - 散点图、散点图标签、overlay label、tooltip 样式
+- 散点图时间范围切换按钮样式
 
 关键样式约束：
 
@@ -483,6 +544,7 @@ tradeoff：
 - `.chart-label-text` 是纯文字 label，不再有背景块或边框
 - `.chart-hover-label-layer` 是 hover overlay label 的单独图层
 - `.chart-hover-label-text` 的描边比默认 label 更重
+- `.chart-range-toggle` 是顶部图表时间范围按钮容器
 
 ### `docs/data/recommendations.csv`
 
@@ -506,10 +568,11 @@ tradeoff：
 负责：
 
 - 读取 `recommendations.csv`
-- 规范化/校验 A 股代码
-- 调用 Yahoo Finance chart API 拉取历史日线
+- 规范化/校验 A 股与港股代码
+- 调用腾讯行情接口拉取 A 股 / 港股前复权日线
 - 计算收益相关指标
 - 输出 `metrics.json`
+- 对重复推荐的同一 `query_symbol` 做抓价缓存，避免重复请求
 
 关键类/异常：
 
@@ -523,13 +586,15 @@ tradeoff：
 - `sanitize_id(raw_id: str) -> str`
 - `generate_recommendation_id(symbol: str, recommend_date: str, row_number: int) -> str`
 - `read_recommendations(csv_path: Path) -> tuple[list[Recommendation], list[dict]]`
-- `yahoo_history(symbol: str, start_date: dt.date, end_date: dt.date) -> list[dict]`
+- `tencent_symbol(symbol: str) -> tuple[str, str]`
+- `tencent_history(symbol: str, start_date: dt.date, end_date: dt.date) -> list[dict]`
 - `first_index_on_or_after(bars: list[dict], target_date: dt.date) -> int | None`
 - `calculate_max_drawdown(closes: list[float]) -> tuple[float | None, float | None]`
 - `compute_record(rec: Recommendation, bars: list[dict]) -> dict`
 - `annotate_recommendation_sequences(records: list[dict]) -> list[dict]`
 - `build_stock_summaries(records: list[dict]) -> list[dict]`
 - `average(values: list[float | None]) -> float | None`
+- `refresh_context(now: dt.datetime) -> dict`
 - `build_summary(records: list[dict]) -> dict`
 - `main() -> int`
 
@@ -607,7 +672,7 @@ id,symbol,name,recommend_date,note
 字段含义：
 
 - `id`：推荐事件唯一 ID
-- `symbol`：A 股代码。CSV 里字段名仍然是 `symbol`
+- `symbol`：股票代码。CSV 里字段名仍然是 `symbol`
 - `name`：股票名称
 - `recommend_date`：推荐日期，要求 `YYYY-MM-DD`
 - `note`：备注
@@ -616,7 +681,8 @@ id,symbol,name,recommend_date,note
 
 - 行可以乱序
 - `id` 必须全表唯一
-- `symbol` 可以写裸 6 位代码，也可以写 `.SH/.SS/.SZ`
+- `symbol` 可以写 A 股裸 6 位代码，也可以写 `.SH/.SS/.SZ`
+- `symbol` 也可以写港股裸代码或 `.HK`
 - 空行允许存在，会被忽略
 
 ## `metrics.json` contract
@@ -686,7 +752,7 @@ id,symbol,name,recommend_date,note
 字段含义补充：
 
 - `entry_date`：实际建仓对应的交易日；若推荐日不是交易日，会顺延
-- `query_symbol`：给 Yahoo Finance 使用的标准代码，如 `600584.SS`
+- `query_symbol`：内部统一标准代码；A 股如 `600584.SS`，港股如 `0700.HK`
 - `recommendation_sequence`：该股票按时间排序后的第几次推荐
 - `recommendation_count_for_symbol`：该股票在全量事件中的推荐总次数
 
@@ -736,24 +802,54 @@ id,symbol,name,recommend_date,note
 - `recommend_date`
 - `error`
 
+### `refresh_context`
+
+当前字段：
+
+- `trigger: string`
+- `trigger_label: string`
+- `generated_at: string`
+
+当前 `trigger_label` 映射：
+
+- `schedule` -> `定时触发`
+- `workflow_dispatch` -> `手动触发`
+- `push` -> `推送触发`
+- `local` -> `本地刷新`
+
 ## 外部 API contract
 
-当前唯一外部数据接口是 Yahoo Finance chart API：
+当前唯一外部数据接口是腾讯行情接口：
 
-- 常量：`YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"`
+- A 股：`https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={symbol},day,,,{count},qfq`
+- 港股：`https://web.ifzq.gtimg.cn/appstock/app/hkfqkline/get?param={symbol},day,,,{count},qfq`
 
-请求参数来自 `yahoo_history()`：
+`tencent_symbol()` 的映射规则：
 
-- `period1`
-- `period2`
-- `interval=1d`
-- `includePrePost=false`
-- `events=div,splits`
+- `600519.SS` -> `("a", "sh600519")`
+- `000001.SZ` -> `("a", "sz000001")`
+- `0700.HK` -> `("hk", "hk00700")`
+- `0005.HK` -> `("hk", "hk00005")`
 
-脚本假设返回结构中存在：
+`tencent_history()` 当前假设：
 
-- `chart.result[0].timestamp`
-- `chart.result[0].indicators.quote[0].open/high/low/close/volume`
+- 响应顶层 `code == 0`
+- `data[provider_symbol]` 存在
+- 优先读取 `qfqday`，缺失时回退到 `day`
+- 单条 bar 至少有前 6 个字段：
+  - `[0]` 日期 `YYYY-MM-DD`
+  - `[1]` 开盘价
+  - `[2]` 收盘价
+  - `[3]` 最高价
+  - `[4]` 最低价
+  - `[5]` 成交量
+
+当前实现会：
+
+- 根据 `start_date/end_date` 在本地二次过滤 bar 日期
+- 用 `(end_date - start_date).days * 2 + 60` 推导请求 `count`
+- 将 `count` 夹在 `120..5000` 范围内
+- 对同一 `query_symbol` 只请求一次，后续推荐事件复用缓存
 
 不要在没有验证的情况下替换数据源或修改 `compute_record()` 的字段输出，否则会直接影响前端 contract。
 
@@ -846,3 +942,8 @@ node --check docs/app.js
 - 当前 label 已经被改成纯文字，没有背景块和边框；如果重新加底板，大概率会再次被用户否掉
 - workflow 结构最近刚改过：不要再基于旧理解以为有独立的 `update.yml`
 - 当前 `pages.yml` 既负责 schedule 更新，也负责部署；如果后续再拆分，必须重新评估 bot push 循环触发问题
+- 顶部“最近更新”现在依赖 `metrics.json.refresh_context`，如果你改 `update_data.py` 输出结构，要同步改 `docs/app.js`
+- 港股支持刚加完，后续如果要改 symbol 规则，优先检查：
+  - `normalize_symbol()`
+  - `validate_symbol()`
+  - `parse_symbol()`

@@ -13,7 +13,6 @@ import statistics
 import sys
 import time
 import urllib.error
-import urllib.parse
 import urllib.request
 from collections import defaultdict
 from dataclasses import dataclass
@@ -22,7 +21,8 @@ from zoneinfo import ZoneInfo
 
 
 
-YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+TENCENT_A_CHART_URL = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={symbol},day,,,{count},qfq"
+TENCENT_HK_CHART_URL = "https://web.ifzq.gtimg.cn/appstock/app/hkfqkline/get?param={symbol},day,,,{count},qfq"
 
 
 class PendingTrackingError(RuntimeError):
@@ -203,19 +203,21 @@ def read_recommendations(csv_path: Path) -> tuple[list[Recommendation], list[dic
   return recommendations, failures
 
 
-def yahoo_history(symbol: str, start_date: dt.date, end_date: dt.date) -> list[dict]:
-  period1 = int(dt.datetime.combine(start_date, dt.time.min, tzinfo=dt.timezone.utc).timestamp())
-  period2 = int(dt.datetime.combine(end_date + dt.timedelta(days=1), dt.time.min, tzinfo=dt.timezone.utc).timestamp())
-  query = urllib.parse.urlencode(
-    {
-      "period1": period1,
-      "period2": period2,
-      "interval": "1d",
-      "includePrePost": "false",
-      "events": "div,splits",
-    }
-  )
-  url = YAHOO_CHART_URL.format(symbol=urllib.parse.quote(symbol)) + f"?{query}"
+def tencent_symbol(symbol: str) -> tuple[str, str]:
+  if symbol.endswith(".SS"):
+    return "a", f"sh{symbol[:-3]}"
+  if symbol.endswith(".SZ"):
+    return "a", f"sz{symbol[:-3]}"
+  if symbol.endswith(".HK"):
+    return "hk", f"hk{symbol[:-3].zfill(5)}"
+  raise ValueError(f"Unsupported market symbol: {symbol}")
+
+
+def tencent_history(symbol: str, start_date: dt.date, end_date: dt.date) -> list[dict]:
+  market, provider_symbol = tencent_symbol(symbol)
+  bar_count = min(max((end_date - start_date).days * 2 + 60, 120), 5000)
+  url_template = TENCENT_HK_CHART_URL if market == "hk" else TENCENT_A_CHART_URL
+  url = url_template.format(symbol=provider_symbol, count=bar_count)
   request = urllib.request.Request(
     url,
     headers={
@@ -227,37 +229,37 @@ def yahoo_history(symbol: str, start_date: dt.date, end_date: dt.date) -> list[d
   with urllib.request.urlopen(request, timeout=20) as response:
     payload = json.loads(response.read().decode("utf-8"))
 
-  result = payload.get("chart", {}).get("result")
-  error = payload.get("chart", {}).get("error")
-  if error:
-    raise RuntimeError(error.get("description") or "Yahoo Finance API error")
-  if not result:
-    raise RuntimeError("No chart result returned")
+  if payload.get("code") not in (0, "0"):
+    raise RuntimeError(payload.get("msg") or "Tencent quote API error")
 
-  result_item = result[0]
-  timestamps = result_item.get("timestamp") or []
-  quote = (result_item.get("indicators", {}).get("quote") or [{}])[0]
+  result_item = (payload.get("data") or {}).get(provider_symbol)
+  if not result_item:
+    raise RuntimeError("No quote result returned")
 
-  opens = quote.get("open") or []
-  highs = quote.get("high") or []
-  lows = quote.get("low") or []
-  closes = quote.get("close") or []
-  volumes = quote.get("volume") or []
+  raw_bars = result_item.get("qfqday") or result_item.get("day") or []
+  if not raw_bars:
+    raise RuntimeError("No market data returned")
 
   bars = []
-  for idx, stamp in enumerate(timestamps):
-    close = closes[idx] if idx < len(closes) else None
-    if close is None:
+  for raw_bar in raw_bars:
+    if len(raw_bar) < 6:
+      continue
+    bar_date = dt.date.fromisoformat(str(raw_bar[0]))
+    if bar_date < start_date or bar_date > end_date:
+      continue
+
+    close = raw_bar[2]
+    if close is None or close == "":
       continue
 
     bars.append(
       {
-        "date": dt.datetime.fromtimestamp(stamp, tz=dt.timezone.utc).date(),
-        "open": opens[idx] if idx < len(opens) else None,
-        "high": highs[idx] if idx < len(highs) else close,
-        "low": lows[idx] if idx < len(lows) else close,
-        "close": close,
-        "volume": volumes[idx] if idx < len(volumes) else None,
+        "date": bar_date,
+        "open": float(raw_bar[1]) if raw_bar[1] not in (None, "") else None,
+        "high": float(raw_bar[3]) if raw_bar[3] not in (None, "") else float(close),
+        "low": float(raw_bar[4]) if raw_bar[4] not in (None, "") else float(close),
+        "close": float(close),
+        "volume": float(raw_bar[5]) if raw_bar[5] not in (None, "") else None,
       }
     )
 
@@ -450,15 +452,19 @@ def main() -> int:
   records = []
   today = dt.date.today()
   pending_records = []
+  bars_cache: dict[str, list[dict]] = {}
 
   for rec in recommendations:
     try:
       start_date = rec.recommend_date - dt.timedelta(days=14)
-      bars = yahoo_history(rec.query_symbol, start_date=start_date, end_date=today)
+      bars = bars_cache.get(rec.query_symbol)
+      if bars is None:
+        bars = tencent_history(rec.query_symbol, start_date=start_date, end_date=today)
+        bars_cache[rec.query_symbol] = bars
+        time.sleep(0.2)
       if not bars:
         raise RuntimeError("No market data returned")
       records.append(compute_record(rec, bars))
-      time.sleep(0.4)
     except PendingTrackingError as exc:
       pending_records.append(
         {

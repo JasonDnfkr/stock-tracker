@@ -146,8 +146,8 @@ def maybe_refresh_metrics(should_refresh: bool) -> None:
 def cmd_list(args: argparse.Namespace) -> int:
     rows = read_rows(Path(args.csv))
     if args.code:
-        keyword = args.code.strip().upper()
-        rows = [row for row in rows if row.symbol.upper() == keyword]
+        keyword = parse_symbol(args.code)
+        rows = [row for row in rows if row.symbol.upper() == keyword.upper()]
     print(render_table(rows))
     return 0
 

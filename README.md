@@ -3,7 +3,7 @@
 这是一个不依赖自购服务器的静态小项目：
 
 - 你维护推荐记录
-- `scripts/update_data.py` 抓取 A 股 / 港股日线并计算指标
+- `scripts/update_data.py` 通过腾讯行情接口抓取 A 股 / 港股日线并计算指标
 - GitHub Actions 自动刷新 `docs/data/metrics.json`
 - GitHub Pages 直接展示网页
 
@@ -133,7 +133,7 @@ python3 -m http.server 8000 --directory docs
 
 - push 到 `main`
 - 手动 `Run workflow`
-- 定时任务：每天 `18:10`（北京时间）
+- 定时任务：北京时间工作日 `09:00 / 09:30 / 10:00 / 10:30 / 11:00 / 11:30 / 13:00 / 13:30 / 14:00 / 14:30 / 15:00`
 
 如果你希望继续免费使用 GitHub Actions + GitHub Pages，最简单的方式是保持仓库为公开仓库。
 
