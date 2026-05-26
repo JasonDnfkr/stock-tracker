@@ -415,18 +415,25 @@ def refresh_context(now: dt.datetime) -> dict:
 
 
 def build_summary(records: list[dict]) -> dict:
+  first_records_by_symbol: dict[str, dict] = {}
+  for record in sorted(records, key=lambda item: (item["recommend_date"], item["id"])):
+    first_records_by_symbol.setdefault(record["symbol"], record)
+
+  summary_records = list(first_records_by_symbol.values())
   total = len(records)
-  profitable = sum(1 for record in records if record.get("is_profitable"))
+  profitable = sum(1 for record in summary_records if record.get("is_profitable"))
 
   return {
     "total_picks": total,
     "unique_symbols": len({record["symbol"] for record in records}),
+    "summary_basis": "first_recommendation",
+    "summary_basis_count": len(summary_records),
     "profitable_picks": profitable,
-    "win_rate": round(profitable / total, 6) if total else None,
-    "average_return": average([record.get("return_rate") for record in records]),
-    "average_return_5d": average([record.get("return_5d") for record in records]),
-    "average_return_10d": average([record.get("return_10d") for record in records]),
-    "average_return_20d": average([record.get("return_20d") for record in records]),
+    "win_rate": round(profitable / len(summary_records), 6) if summary_records else None,
+    "average_return": average([record.get("return_rate") for record in summary_records]),
+    "average_return_5d": average([record.get("return_5d") for record in summary_records]),
+    "average_return_10d": average([record.get("return_10d") for record in summary_records]),
+    "average_return_20d": average([record.get("return_20d") for record in summary_records]),
   }
 
 

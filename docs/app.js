@@ -220,16 +220,36 @@ function renderSummary(summary) {
   const cards = [
     { label: "推荐总数", value: summary.total_picks, valueClass: "", hint: "" },
     { label: "覆盖股票数", value: summary.unique_symbols, valueClass: "", hint: "" },
-    { label: "当前盈利数", value: summary.profitable_picks, valueClass: "", hint: "" },
-    { label: "当前胜率", value: formatPercent(summary.win_rate), valueClass: "", hint: "" },
+    {
+      label: "当前盈利数",
+      value: summary.profitable_picks,
+      valueClass: "",
+      hint: "按每只股票第一次推荐的那条记录统计；同一股票后续重复推荐不重复计入。",
+    },
+    {
+      label: "当前胜率",
+      value: formatPercent(summary.win_rate),
+      valueClass: "",
+      hint: "按每只股票第一次推荐的那条记录统计胜率；分母不是推荐事件总数。",
+    },
     {
       label: "平均收益率",
       value: formatSignedPercent(summary.average_return),
       valueClass: metricClass(summary.average_return),
-      hint: "按全部推荐事件的当前收益率直接平均；同一只股票多次推荐会分别计入。",
+      hint: "按每只股票第一次推荐的当前收益率直接平均；同一股票后续重复推荐不重复计入。",
     },
-    { label: "平均 5 日收益", value: formatSignedPercent(summary.average_return_5d), valueClass: metricClass(summary.average_return_5d), hint: "" },
-    { label: "平均 10 日收益", value: formatSignedPercent(summary.average_return_10d), valueClass: metricClass(summary.average_return_10d), hint: "" },
+    {
+      label: "平均 5 日收益",
+      value: formatSignedPercent(summary.average_return_5d),
+      valueClass: metricClass(summary.average_return_5d),
+      hint: "按每只股票第一次推荐统计；只对已满 5 个交易日的首次推荐记录求平均。",
+    },
+    {
+      label: "平均 10 日收益",
+      value: formatSignedPercent(summary.average_return_10d),
+      valueClass: metricClass(summary.average_return_10d),
+      hint: "按每只股票第一次推荐统计；只对已满 10 个交易日的首次推荐记录求平均。",
+    },
   ];
 
   summaryGrid.innerHTML = cards
