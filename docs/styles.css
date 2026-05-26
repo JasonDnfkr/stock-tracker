@@ -154,6 +154,8 @@ h1 {
 
 .chart-block {
   margin-top: 18px;
+  position: relative;
+  min-width: 0;
 }
 
 .chart-range-toggle {
@@ -165,6 +167,10 @@ h1 {
   border-radius: 999px;
   background: rgba(98, 19, 34, 0.06);
   border: 1px solid rgba(110, 23, 33, 0.1);
+  position: relative;
+  z-index: 2;
+  width: max-content;
+  max-width: 100%;
 }
 
 .chart-range-toggle .toggle-btn {
@@ -175,6 +181,9 @@ h1 {
 .chart-shell {
   display: grid;
   gap: 14px;
+  position: relative;
+  z-index: 1;
+  min-width: 0;
 }
 
 .chart-meta {
@@ -231,11 +240,18 @@ h1 {
 
 .chart-scroll {
   overflow-x: auto;
+  overflow-y: hidden;
   padding-bottom: 4px;
+  width: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+
+.chart-scroll-inner {
+  min-width: 100%;
 }
 
 .timeline-svg {
-  width: max(100%, 920px);
+  width: 100%;
   height: auto;
   display: block;
   border-radius: 18px;
@@ -594,6 +610,10 @@ th {
   display: flex;
   flex-direction: column;
   gap: 1px;
+}
+
+.price-main {
+  font-weight: 700;
 }
 
 .cell-note {

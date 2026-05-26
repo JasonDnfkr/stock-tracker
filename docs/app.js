@@ -118,7 +118,7 @@ function renderPriceWithMetric(price, rate) {
   const toneClass = metricClass(rate);
   return `
     <div class="price-cell">
-      <span class="${toneClass}">${formatNumber(price)}</span>
+      <span class="price-main ${toneClass}">${formatNumber(price)}</span>
       <span class="cell-note ${toneClass}">${formatSignedPercent(rate)}</span>
     </div>
   `;
@@ -127,7 +127,7 @@ function renderPriceWithMetric(price, rate) {
 function renderEntryPrice(price, entryDate, recommendDate) {
   return `
     <div class="price-cell">
-      <span>${formatNumber(price)}</span>
+      <span class="price-main">${formatNumber(price)}</span>
       <span class="cell-note" title="${entryDate && recommendDate && entryDate !== recommendDate ? `顺延到 ${entryDate}` : entryDate || ""}">${formatEntryDateLabel(entryDate, recommendDate)}</span>
     </div>
   `;
@@ -593,95 +593,97 @@ function renderTimelineChart(records) {
       </div>
     </div>
     <div class="chart-scroll">
-      <svg class="timeline-svg" viewBox="0 0 ${chartWidth} ${chartHeight}" role="img" aria-label="推荐事件收益时间线散点图">
-        <g class="chart-grid">
-          ${yTicks
-            .map((tickValue) => {
-              const y = yScaleFromCompressed(tickValue);
+      <div class="chart-scroll-inner" style="width:${chartWidth}px">
+        <svg class="timeline-svg" viewBox="0 0 ${chartWidth} ${chartHeight}" role="img" aria-label="推荐事件收益时间线散点图">
+          <g class="chart-grid">
+            ${yTicks
+              .map((tickValue) => {
+                const y = yScaleFromCompressed(tickValue);
+                return `
+                  <line x1="${margin.left}" y1="${y}" x2="${chartWidth - margin.right}" y2="${y}" class="chart-grid-line" />
+                  <text x="${margin.left - 12}" y="${y + 4}" text-anchor="end" class="chart-axis-text">${escapeHtml(formatSignedPercent(expandCompressedReturn(tickValue)))}</text>
+                `;
+              })
+              .join("")}
+            ${xTicks
+              .map((tick) => {
+                const x = xScale(tick.value);
+                return `
+                  <line x1="${x}" y1="${margin.top}" x2="${x}" y2="${chartHeight - margin.bottom}" class="chart-grid-line chart-grid-line-vertical" />
+                  <text x="${x}" y="${chartHeight - margin.bottom + 24}" text-anchor="middle" class="chart-axis-text" title="${tick.fullLabel}">${tick.label}</text>
+                `;
+              })
+              .join("")}
+          </g>
+          <line x1="${margin.left}" y1="${zeroY}" x2="${chartWidth - margin.right}" y2="${zeroY}" class="chart-zero-line" />
+          <line x1="${margin.left}" y1="${averageY}" x2="${chartWidth - margin.right}" y2="${averageY}" class="chart-average-line" />
+          ${positionedRecords
+            .map((record) => {
+              const label = labelMap.get(record.id);
+              if (!label) {
+                return "";
+              }
+
               return `
-                <line x1="${margin.left}" y1="${y}" x2="${chartWidth - margin.right}" y2="${y}" class="chart-grid-line" />
-                <text x="${margin.left - 12}" y="${y + 4}" text-anchor="end" class="chart-axis-text">${escapeHtml(formatSignedPercent(expandCompressedReturn(tickValue)))}</text>
+                <g
+                  class="chart-label-group${label.hidden ? " hidden" : ""}"
+                  data-label-id="${escapeHtml(record.id)}"
+                  data-overlaps-point="${label.overlapsPoint ? "true" : "false"}"
+                  data-hover-safe="${label.hoverSafe ? "true" : "false"}"
+                >
+                  <text
+                    x="${label.textX}"
+                    y="${label.textY}"
+                    text-anchor="${label.textAnchor}"
+                    data-base-x="${label.textX}"
+                    data-base-y="${label.textY}"
+                    data-base-anchor="${label.textAnchor}"
+                    data-hover-x="${label.hoverTextX}"
+                    data-hover-y="${label.hoverTextY}"
+                    data-hover-anchor="${label.hoverTextAnchor}"
+                    class="chart-label-text ${label.toneClass}"
+                  >${escapeHtml(label.labelText)}</text>
+                </g>
               `;
             })
             .join("")}
-          ${xTicks
-            .map((tick) => {
-              const x = xScale(tick.value);
+          ${positionedRecords
+            .map((record) => {
+              const pointClass = record.return_rate >= 0 ? "profit-point" : "loss-point";
+              const label = labelMap.get(record.id);
+
               return `
-                <line x1="${x}" y1="${margin.top}" x2="${x}" y2="${chartHeight - margin.bottom}" class="chart-grid-line chart-grid-line-vertical" />
-                <text x="${x}" y="${chartHeight - margin.bottom + 24}" text-anchor="middle" class="chart-axis-text" title="${tick.fullLabel}">${tick.label}</text>
+                <circle
+                  cx="${record.x}"
+                  cy="${record.y}"
+                  r="5.5"
+                  class="chart-point ${pointClass}"
+                  data-symbol="${escapeHtml(record.symbol)}"
+                  data-name="${escapeHtml(record.name || "--")}"
+                  data-recommend-date="${escapeHtml(formatTooltipDate(record.recommend_date))}"
+                  data-return-rate="${escapeHtml(tooltipMetricText(record.return_rate))}"
+                  data-return-rate-value="${record.return_rate}"
+                  data-return-five-day="${escapeHtml(tooltipMetricText(record.return_5d))}"
+                  data-return-five-day-value="${record.return_5d ?? ""}"
+                  data-return-ten-day="${escapeHtml(tooltipMetricText(record.return_10d))}"
+                  data-return-ten-day-value="${record.return_10d ?? ""}"
+                  data-return-twenty-day="${escapeHtml(tooltipMetricText(record.return_20d))}"
+                  data-return-twenty-day-value="${record.return_20d ?? ""}"
+                  data-id="${escapeHtml(record.id)}"
+                  data-label-id="${escapeHtml(record.id)}"
+                  data-label-text="${escapeHtml(label?.labelText || "")}"
+                  data-label-tone-class="${escapeHtml(label?.toneClass || "neutral-text")}"
+                  data-label-visible="${label && !label.hidden ? "true" : "false"}"
+                  data-hover-x="${label?.hoverTextX ?? ""}"
+                  data-hover-y="${label?.hoverTextY ?? ""}"
+                  data-hover-anchor="${escapeHtml(label?.hoverTextAnchor || "start")}"
+                ></circle>
               `;
             })
             .join("")}
-        </g>
-        <line x1="${margin.left}" y1="${zeroY}" x2="${chartWidth - margin.right}" y2="${zeroY}" class="chart-zero-line" />
-        <line x1="${margin.left}" y1="${averageY}" x2="${chartWidth - margin.right}" y2="${averageY}" class="chart-average-line" />
-        ${positionedRecords
-          .map((record) => {
-            const label = labelMap.get(record.id);
-            if (!label) {
-              return "";
-            }
-
-            return `
-              <g
-                class="chart-label-group${label.hidden ? " hidden" : ""}"
-                data-label-id="${escapeHtml(record.id)}"
-                data-overlaps-point="${label.overlapsPoint ? "true" : "false"}"
-                data-hover-safe="${label.hoverSafe ? "true" : "false"}"
-              >
-                <text
-                  x="${label.textX}"
-                  y="${label.textY}"
-                  text-anchor="${label.textAnchor}"
-                  data-base-x="${label.textX}"
-                  data-base-y="${label.textY}"
-                  data-base-anchor="${label.textAnchor}"
-                  data-hover-x="${label.hoverTextX}"
-                  data-hover-y="${label.hoverTextY}"
-                  data-hover-anchor="${label.hoverTextAnchor}"
-                  class="chart-label-text ${label.toneClass}"
-                >${escapeHtml(label.labelText)}</text>
-              </g>
-            `;
-          })
-          .join("")}
-        ${positionedRecords
-          .map((record) => {
-            const pointClass = record.return_rate >= 0 ? "profit-point" : "loss-point";
-            const label = labelMap.get(record.id);
-
-            return `
-              <circle
-                cx="${record.x}"
-                cy="${record.y}"
-                r="5.5"
-                class="chart-point ${pointClass}"
-                data-symbol="${escapeHtml(record.symbol)}"
-                data-name="${escapeHtml(record.name || "--")}"
-                data-recommend-date="${escapeHtml(formatTooltipDate(record.recommend_date))}"
-                data-return-rate="${escapeHtml(tooltipMetricText(record.return_rate))}"
-                data-return-rate-value="${record.return_rate}"
-                data-return-five-day="${escapeHtml(tooltipMetricText(record.return_5d))}"
-                data-return-five-day-value="${record.return_5d ?? ""}"
-                data-return-ten-day="${escapeHtml(tooltipMetricText(record.return_10d))}"
-                data-return-ten-day-value="${record.return_10d ?? ""}"
-                data-return-twenty-day="${escapeHtml(tooltipMetricText(record.return_20d))}"
-                data-return-twenty-day-value="${record.return_20d ?? ""}"
-                data-id="${escapeHtml(record.id)}"
-                data-label-id="${escapeHtml(record.id)}"
-                data-label-text="${escapeHtml(label?.labelText || "")}"
-                data-label-tone-class="${escapeHtml(label?.toneClass || "neutral-text")}"
-                data-label-visible="${label && !label.hidden ? "true" : "false"}"
-                data-hover-x="${label?.hoverTextX ?? ""}"
-                data-hover-y="${label?.hoverTextY ?? ""}"
-                data-hover-anchor="${escapeHtml(label?.hoverTextAnchor || "start")}"
-              ></circle>
-            `;
-          })
-          .join("")}
-        <g id="chart-hover-label-layer" class="chart-hover-label-layer hidden"></g>
-      </svg>
+          <g id="chart-hover-label-layer" class="chart-hover-label-layer hidden"></g>
+        </svg>
+      </div>
     </div>
   `;
 }
@@ -1156,11 +1158,12 @@ eventViewBtn.addEventListener("click", () => {
   syncViewButtons();
 });
 timelineRangeControls?.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-range]");
+  const button = event.target.closest("button[data-range]");
   if (!button) {
     return;
   }
 
+  event.preventDefault();
   currentTimelineRange = button.dataset.range || "20d";
   applyFilter();
 });
