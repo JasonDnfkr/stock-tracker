@@ -504,7 +504,7 @@ h1 {
   justify-content: end;
 }
 
-.recommender-filter {
+.tag-filter {
   display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
@@ -677,7 +677,7 @@ th {
   border: 1px solid rgba(110, 23, 33, 0.1);
 }
 
-.recommender-badge {
+.tag-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;

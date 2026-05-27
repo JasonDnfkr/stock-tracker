@@ -1,14 +1,14 @@
 {
-  "generated_at": "2026-05-28 01:48:30",
+  "generated_at": "2026-05-28 02:15:43",
   "refresh_context": {
     "trigger": "local",
     "trigger_label": "本地刷新",
-    "generated_at": "2026-05-28 01:48:30"
+    "generated_at": "2026-05-28 02:15:43"
   },
   "summary": {
     "total_picks": 30,
     "unique_symbols": 28,
-    "summary_basis": "first_recommendation_by_recommender_symbol",
+    "summary_basis": "first_recommendation_by_tag_symbol",
     "summary_basis_count": 28,
     "profitable_picks": 20,
     "win_rate": 0.714286,
@@ -20,7 +20,7 @@
   "records": [
     {
       "id": "20260527-000021-1",
-      "recommender": "分组A",
+      "tag": "分组A",
       "symbol": "000021",
       "query_symbol": "000021.SZ",
       "name": "深科技",
@@ -50,7 +50,7 @@
     },
     {
       "id": "20260527-002384-1",
-      "recommender": "分组B",
+      "tag": "分组B",
       "symbol": "002384",
       "query_symbol": "002384.SZ",
       "name": "东山精密",
@@ -80,7 +80,7 @@
     },
     {
       "id": "20260527-601126-1",
-      "recommender": "分组B",
+      "tag": "分组B",
       "symbol": "601126",
       "query_symbol": "601126.SS",
       "name": "四方股份",
@@ -110,7 +110,7 @@
     },
     {
       "id": "20260526-000988-1",
-      "recommender": "分组A",
+      "tag": "分组A",
       "symbol": "000988",
       "query_symbol": "000988.SZ",
       "name": "华工科技",
@@ -140,7 +140,7 @@
     },
     {
       "id": "20260525-603986-1",
-      "recommender": "分组A",
+      "tag": "分组A",
       "symbol": "603986",
       "query_symbol": "603986.SS",
       "name": "兆易创新",
@@ -170,7 +170,7 @@
     },
     {
       "id": "20260523-000636-1",
-      "recommender": "分组A",
+      "tag": "分组A",
       "symbol": "000636",
       "query_symbol": "000636.SZ",
       "name": "风华高科",
@@ -200,7 +200,7 @@
     },
     {
       "id": "20260523-002463-1",
-      "recommender": "分组A",
+      "tag": "分组A",
       "symbol": "002463",
       "query_symbol": "002463.SZ",
       "name": "沪电股份",
@@ -230,7 +230,7 @@
     },
     {
       "id": "20260523-300408-1",
-      "recommender": "分组A",
+      "tag": "分组A",
       "symbol": "300408",
       "query_symbol": "300408.SZ",
       "name": "三环集团",
@@ -260,7 +260,7 @@
     },
     {
       "id": "20260525-00148-1",
-      "recommender": "分组A",
+      "tag": "分组A",
       "symbol": "00148",
       "query_symbol": "00148.HK",
       "name": "建滔集团",
@@ -290,7 +290,7 @@
     },
     {
       "id": "20260525-002364-1",
-      "recommender": "分组A",
+      "tag": "分组A",
       "symbol": "002364",
       "query_symbol": "002364.SZ",
       "name": "中恒电气",
@@ -320,7 +320,7 @@
     },
     {
       "id": "20260525-002436-1",
-      "recommender": "分组A",
+      "tag": "分组A",
       "symbol": "002436",
       "query_symbol": "002436.SZ",
       "name": "兴森科技",
@@ -350,7 +350,7 @@
     },
     {
       "id": "20260525-002886-1",
-      "recommender": "分组A",
+      "tag": "分组A",
       "symbol": "002886",
       "query_symbol": "002886.SZ",
       "name": "沃特股份",
@@ -380,7 +380,7 @@
     },
     {
       "id": "20260525-300285-1",
-      "recommender": "分组A",
+      "tag": "分组A",
       "symbol": "300285",
       "query_symbol": "300285.SZ",
       "name": "国瓷材料",
@@ -410,7 +410,7 @@
     },
     {
       "id": "20260525-301511-1",
-      "recommender": "分组A",
+      "tag": "分组A",
       "symbol": "301511",
       "query_symbol": "301511.SZ",
       "name": "德福科技",
@@ -440,7 +440,7 @@
     },
     {
       "id": "20260525-301526-1",
-      "recommender": "分组A",
+      "tag": "分组A",
       "symbol": "301526",
       "query_symbol": "301526.SZ",
       "name": "国际复材",
@@ -470,7 +470,7 @@
     },
     {
       "id": "20260525-601208-1",
-      "recommender": "分组A",
+      "tag": "分组A",
       "symbol": "601208",
       "query_symbol": "601208.SS",
       "name": "东材科技",
@@ -500,7 +500,7 @@
     },
     {
       "id": "20260525-603256-1",
-      "recommender": "分组A",
+      "tag": "分组A",
       "symbol": "603256",
       "query_symbol": "603256.SS",
       "name": "宏和科技",
@@ -530,7 +530,7 @@
     },
     {
       "id": "20260521-002156-1",
-      "recommender": "分组A",
+      "tag": "分组A",
       "symbol": "002156",
       "query_symbol": "002156.SZ",
       "name": "通富微电",
@@ -560,7 +560,7 @@
     },
     {
       "id": "20260521-600584-1",
-      "recommender": "分组A",
+      "tag": "分组A",
       "symbol": "600584",
       "query_symbol": "600584.SS",
       "name": "长电科技",
@@ -590,7 +590,7 @@
     },
     {
       "id": "20260521-688820-1",
-      "recommender": "分组A",
+      "tag": "分组A",
       "symbol": "688820",
       "query_symbol": "688820.SS",
       "name": "盛合晶微",
@@ -620,7 +620,7 @@
     },
     {
       "id": "20260520-603119-1",
-      "recommender": "分组A",
+      "tag": "分组A",
       "symbol": "603119",
       "query_symbol": "603119.SS",
       "name": "浙江荣泰",
@@ -650,7 +650,7 @@
     },
     {
       "id": "20260520-605376-1",
-      "recommender": "分组A",
+      "tag": "分组A",
       "symbol": "605376",
       "query_symbol": "605376.SS",
       "name": "博迁新材",
@@ -680,7 +680,7 @@
     },
     {
       "id": "20260517-002409-1",
-      "recommender": "分组A",
+      "tag": "分组A",
       "symbol": "002409",
       "query_symbol": "002409.SZ",
       "name": "雅克科技",
@@ -710,7 +710,7 @@
     },
     {
       "id": "20260517-603283-1",
-      "recommender": "分组A",
+      "tag": "分组A",
       "symbol": "603283",
       "query_symbol": "603283.SS",
       "name": "赛腾股份",
@@ -740,7 +740,7 @@
     },
     {
       "id": "20260517-603986-1",
-      "recommender": "分组A",
+      "tag": "分组A",
       "symbol": "603986",
       "query_symbol": "603986.SS",
       "name": "兆易创新",
@@ -770,7 +770,7 @@
     },
     {
       "id": "20260517-688820-1",
-      "recommender": "分组A",
+      "tag": "分组A",
       "symbol": "688820",
       "query_symbol": "688820.SS",
       "name": "盛合晶微",
@@ -800,7 +800,7 @@
     },
     {
       "id": "20260513-002119-1",
-      "recommender": "分组A",
+      "tag": "分组A",
       "symbol": "002119",
       "query_symbol": "002119.SZ",
       "name": "康强电子",
@@ -830,7 +830,7 @@
     },
     {
       "id": "20260508-001309-1",
-      "recommender": "分组A",
+      "tag": "分组A",
       "symbol": "001309",
       "query_symbol": "001309.SZ",
       "name": "德明利",
@@ -860,7 +860,7 @@
     },
     {
       "id": "20260507-002709-1",
-      "recommender": "分组A",
+      "tag": "分组A",
       "symbol": "002709",
       "query_symbol": "002709.SZ",
       "name": "天赐材料",
@@ -890,7 +890,7 @@
     },
     {
       "id": "20260506-301666-1",
-      "recommender": "分组A",
+      "tag": "分组A",
       "symbol": "301666",
       "query_symbol": "301666.SZ",
       "name": "大普微",
@@ -922,7 +922,7 @@
   "stock_summaries": [
     {
       "symbol": "601126",
-      "recommender": "分组B",
+      "tag": "分组B",
       "name": "四方股份",
       "recommendation_count": 1,
       "profitable_count": 0,
@@ -934,7 +934,7 @@
     },
     {
       "symbol": "002384",
-      "recommender": "分组B",
+      "tag": "分组B",
       "name": "东山精密",
       "recommendation_count": 1,
       "profitable_count": 0,
@@ -946,7 +946,7 @@
     },
     {
       "symbol": "000021",
-      "recommender": "分组A",
+      "tag": "分组A",
       "name": "深科技",
       "recommendation_count": 1,
       "profitable_count": 0,
@@ -958,7 +958,7 @@
     },
     {
       "symbol": "000988",
-      "recommender": "分组A",
+      "tag": "分组A",
       "name": "华工科技",
       "recommendation_count": 1,
       "profitable_count": 0,
@@ -970,7 +970,7 @@
     },
     {
       "symbol": "603986",
-      "recommender": "分组A",
+      "tag": "分组A",
       "name": "兆易创新",
       "recommendation_count": 2,
       "profitable_count": 1,
@@ -982,7 +982,7 @@
     },
     {
       "symbol": "300408",
-      "recommender": "分组A",
+      "tag": "分组A",
       "name": "三环集团",
       "recommendation_count": 1,
       "profitable_count": 1,
@@ -994,7 +994,7 @@
     },
     {
       "symbol": "002463",
-      "recommender": "分组A",
+      "tag": "分组A",
       "name": "沪电股份",
       "recommendation_count": 1,
       "profitable_count": 1,
@@ -1006,7 +1006,7 @@
     },
     {
       "symbol": "000636",
-      "recommender": "分组A",
+      "tag": "分组A",
       "name": "风华高科",
       "recommendation_count": 1,
       "profitable_count": 1,
@@ -1018,7 +1018,7 @@
     },
     {
       "symbol": "603256",
-      "recommender": "分组A",
+      "tag": "分组A",
       "name": "宏和科技",
       "recommendation_count": 1,
       "profitable_count": 1,
@@ -1030,7 +1030,7 @@
     },
     {
       "symbol": "601208",
-      "recommender": "分组A",
+      "tag": "分组A",
       "name": "东材科技",
       "recommendation_count": 1,
       "profitable_count": 0,
@@ -1042,7 +1042,7 @@
     },
     {
       "symbol": "301526",
-      "recommender": "分组A",
+      "tag": "分组A",
       "name": "国际复材",
       "recommendation_count": 1,
       "profitable_count": 1,
@@ -1054,7 +1054,7 @@
     },
     {
       "symbol": "301511",
-      "recommender": "分组A",
+      "tag": "分组A",
       "name": "德福科技",
       "recommendation_count": 1,
       "profitable_count": 0,
@@ -1066,7 +1066,7 @@
     },
     {
       "symbol": "300285",
-      "recommender": "分组A",
+      "tag": "分组A",
       "name": "国瓷材料",
       "recommendation_count": 1,
       "profitable_count": 1,
@@ -1078,7 +1078,7 @@
     },
     {
       "symbol": "002886",
-      "recommender": "分组A",
+      "tag": "分组A",
       "name": "沃特股份",
       "recommendation_count": 1,
       "profitable_count": 1,
@@ -1090,7 +1090,7 @@
     },
     {
       "symbol": "002436",
-      "recommender": "分组A",
+      "tag": "分组A",
       "name": "兴森科技",
       "recommendation_count": 1,
       "profitable_count": 1,
@@ -1102,7 +1102,7 @@
     },
     {
       "symbol": "002364",
-      "recommender": "分组A",
+      "tag": "分组A",
       "name": "中恒电气",
       "recommendation_count": 1,
       "profitable_count": 1,
@@ -1114,7 +1114,7 @@
     },
     {
       "symbol": "00148",
-      "recommender": "分组A",
+      "tag": "分组A",
       "name": "建滔集团",
       "recommendation_count": 1,
       "profitable_count": 1,
@@ -1126,7 +1126,7 @@
     },
     {
       "symbol": "688820",
-      "recommender": "分组A",
+      "tag": "分组A",
       "name": "盛合晶微",
       "recommendation_count": 2,
       "profitable_count": 2,
@@ -1138,7 +1138,7 @@
     },
     {
       "symbol": "600584",
-      "recommender": "分组A",
+      "tag": "分组A",
       "name": "长电科技",
       "recommendation_count": 1,
       "profitable_count": 1,
@@ -1150,7 +1150,7 @@
     },
     {
       "symbol": "002156",
-      "recommender": "分组A",
+      "tag": "分组A",
       "name": "通富微电",
       "recommendation_count": 1,
       "profitable_count": 1,
@@ -1162,7 +1162,7 @@
     },
     {
       "symbol": "605376",
-      "recommender": "分组A",
+      "tag": "分组A",
       "name": "博迁新材",
       "recommendation_count": 1,
       "profitable_count": 1,
@@ -1174,7 +1174,7 @@
     },
     {
       "symbol": "603119",
-      "recommender": "分组A",
+      "tag": "分组A",
       "name": "浙江荣泰",
       "recommendation_count": 1,
       "profitable_count": 0,
@@ -1186,7 +1186,7 @@
     },
     {
       "symbol": "603283",
-      "recommender": "分组A",
+      "tag": "分组A",
       "name": "赛腾股份",
       "recommendation_count": 1,
       "profitable_count": 1,
@@ -1198,7 +1198,7 @@
     },
     {
       "symbol": "002409",
-      "recommender": "分组A",
+      "tag": "分组A",
       "name": "雅克科技",
       "recommendation_count": 1,
       "profitable_count": 1,
@@ -1210,7 +1210,7 @@
     },
     {
       "symbol": "002119",
-      "recommender": "分组A",
+      "tag": "分组A",
       "name": "康强电子",
       "recommendation_count": 1,
       "profitable_count": 1,
@@ -1222,7 +1222,7 @@
     },
     {
       "symbol": "001309",
-      "recommender": "分组A",
+      "tag": "分组A",
       "name": "德明利",
       "recommendation_count": 1,
       "profitable_count": 1,
@@ -1234,7 +1234,7 @@
     },
     {
       "symbol": "002709",
-      "recommender": "分组A",
+      "tag": "分组A",
       "name": "天赐材料",
       "recommendation_count": 1,
       "profitable_count": 0,
@@ -1246,7 +1246,7 @@
     },
     {
       "symbol": "301666",
-      "recommender": "分组A",
+      "tag": "分组A",
       "name": "大普微",
       "recommendation_count": 1,
       "profitable_count": 1,

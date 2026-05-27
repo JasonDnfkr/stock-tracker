@@ -5,7 +5,7 @@ const recordsBody = document.getElementById("records-body");
 const stockGroupList = document.getElementById("stock-group-list");
 const updatedAt = document.getElementById("updated-at");
 const searchInput = document.getElementById("search-input");
-const recommenderFilter = document.getElementById("recommender-filter");
+const tagFilter = document.getElementById("tag-filter");
 const timelineRangeControls = document.getElementById("timeline-range-controls");
 const emptyState = document.getElementById("empty-state");
 const groupedEmptyState = document.getElementById("grouped-empty-state");
@@ -27,7 +27,7 @@ let allPendingRecords = [];
 let allFailures = [];
 let currentView = "grouped";
 let currentTimelineRange = "20d";
-let currentRecommender = "all";
+let currentTag = "all";
 const expandedGroups = new Set();
 let activeTooltipId = null;
 let activeChartLabelId = null;
@@ -252,6 +252,10 @@ function expandCompressedReturn(value) {
   return sign * value * value;
 }
 
+function recordTag(record) {
+  return record.tag || "默认";
+}
+
 function average(values) {
   const valid = values.filter((value) => value !== null && value !== undefined && !Number.isNaN(value));
   if (!valid.length) {
@@ -271,7 +275,7 @@ function buildSummary(records) {
       return a.id.localeCompare(b.id);
     })
     .forEach((record) => {
-      const summaryKey = `${record.recommender || "默认"}|${record.symbol}`;
+      const summaryKey = `${recordTag(record)}|${record.symbol}`;
       if (!firstRecordsBySymbol.has(summaryKey)) {
         firstRecordsBySymbol.set(summaryKey, record);
       }
@@ -772,7 +776,7 @@ function renderTimelineChart(records) {
                   class="chart-point ${pointClass}"
                   data-symbol="${escapeHtml(record.symbol)}"
                   data-name="${escapeHtml(record.name || "--")}"
-                  data-recommender="${escapeHtml(record.recommender || "默认")}"
+                  data-tag="${escapeHtml(recordTag(record))}"
                   data-recommend-date="${escapeHtml(formatTooltipDate(record.recommend_date))}"
                   data-recommend-time="${escapeHtml(record.recommend_time || "")}"
                   data-entry-price="${escapeHtml(formatNumber(record.entry_price))}"
@@ -905,7 +909,7 @@ function renderChartTooltip(target) {
   const {
     symbol = "--",
     name = "--",
-    recommender = "默认",
+    tag = "默认",
     recommendDate = "--",
     recommendTime = "",
     entryPrice = "--",
@@ -921,7 +925,7 @@ function renderChartTooltip(target) {
     returnTwentyDayValue = "",
   } = target.dataset;
 
-  const tooltipKey = `${recommender}-${symbol}-${recommendDate}-${returnRate}`;
+  const tooltipKey = `${tag}-${symbol}-${recommendDate}-${returnRate}`;
   if (activeTooltipId === tooltipKey && !chartTooltip.classList.contains("hidden")) {
     return;
   }
@@ -933,7 +937,7 @@ function renderChartTooltip(target) {
 
   chartTooltip.innerHTML = `
     <div class="chart-tooltip-title">${escapeHtml(symbol)} ${escapeHtml(name)}</div>
-    <div class="chart-tooltip-row"><span>推荐人</span><strong>${escapeHtml(recommender)}</strong></div>
+    <div class="chart-tooltip-row"><span>标签</span><strong>${escapeHtml(tag)}</strong></div>
     <div class="chart-tooltip-row"><span>推荐时间</span><strong>${escapeHtml([recommendDate, recommendTime].filter(Boolean).join(" ") || "--")}</strong></div>
     <div class="chart-tooltip-row"><span>推荐价</span><strong>${escapeHtml(entryPrice)}${entryTime || recommendTime || entryPriceSource ? ` (${escapeHtml([entryTime || recommendTime, entryPriceSource].filter(Boolean).join(" · "))})` : ""}</strong></div>
     <div class="chart-tooltip-row"><span>当前收益</span><strong class="${tooltipMetricClass(parsedReturnRate)}">${escapeHtml(returnRate)}</strong></div>
@@ -948,7 +952,7 @@ function renderChartTooltip(target) {
 function stockSummaryMap(records) {
   const grouped = new Map();
   for (const record of records) {
-    const groupKey = `${record.recommender || "默认"}|${record.symbol}`;
+    const groupKey = `${recordTag(record)}|${record.symbol}`;
     if (!grouped.has(groupKey)) {
       grouped.set(groupKey, []);
     }
@@ -976,7 +980,7 @@ function buildGroupedStocks(records) {
     groups.push({
       key: groupKey,
       symbol: latestRecord?.symbol || "--",
-      recommender: latestRecord?.recommender || "默认",
+      tag: latestRecord ? recordTag(latestRecord) : "默认",
       name: latestRecord?.name || "--",
       records: symbolRecords,
       recommendation_count: symbolRecords.length,
@@ -991,8 +995,8 @@ function buildGroupedStocks(records) {
     if (b.latest_recommend_date !== a.latest_recommend_date) {
       return b.latest_recommend_date.localeCompare(a.latest_recommend_date);
     }
-    if (a.recommender !== b.recommender) {
-      return a.recommender.localeCompare(b.recommender, "zh-CN");
+    if (a.tag !== b.tag) {
+      return a.tag.localeCompare(b.tag, "zh-CN");
     }
     return a.symbol.localeCompare(b.symbol);
   });
@@ -1032,7 +1036,7 @@ function renderGroupedView(records) {
                 <div class="stock-cell compact">
                   <span class="stock-symbol">${record.symbol}</span>
                   <span class="stock-name" title="事件 ID：${record.id}">${record.name || "--"}</span>
-                  <span class="recommender-badge">${escapeHtml(record.recommender || "默认")}</span>
+                  <span class="tag-badge">${escapeHtml(recordTag(record))}</span>
                   ${
                     group.recommendation_count > 1
                       ? `
@@ -1055,7 +1059,7 @@ function renderGroupedView(records) {
                   <span class="group-placeholder"></span>
                   <span class="stock-subline">
                     ${record.recommend_date}
-                    · ${escapeHtml(record.recommender || "默认")}
+                    · ${escapeHtml(recordTag(record))}
                     ${showSequenceHint ? ` · 第 ${record.recommendation_sequence} 次` : ""}
                   </span>
                 </div>
@@ -1070,7 +1074,7 @@ function renderGroupedView(records) {
                       <div class="stock-cell compact">
                         <span class="stock-symbol">${record.symbol}</span>
                         <span class="stock-name">${record.name || "--"}</span>
-                        <span class="recommender-badge">${escapeHtml(record.recommender || "默认")}</span>
+                        <span class="tag-badge">${escapeHtml(recordTag(record))}</span>
                         ${
                           group.recommendation_count > 1
                             ? `
@@ -1088,7 +1092,7 @@ function renderGroupedView(records) {
                         }
                         <span class="stock-subline">
                           ${record.recommend_date}
-                          · ${escapeHtml(record.recommender || "默认")}
+                          · ${escapeHtml(recordTag(record))}
                           ${showSequenceHint ? ` · 第 ${record.recommendation_sequence} 次` : ""}
                         </span>
                       </div>
@@ -1142,7 +1146,7 @@ function renderTable(records) {
                     ? `<span class="repeat-badge">第 ${record.recommendation_sequence} 次推荐</span>`
                     : ""
                 }
-                <span class="recommender-badge">${escapeHtml(record.recommender || "默认")}</span>
+                <span class="tag-badge">${escapeHtml(recordTag(record))}</span>
               </div>
               <span class="stock-subline">${record.recommend_date}</span>
             </div>
@@ -1170,38 +1174,38 @@ function syncViewButtons() {
   eventViewBtn.classList.toggle("active", currentView === "event");
 }
 
-function recommenderOptions(records) {
-  return [...new Set(records.map((record) => record.recommender || "默认"))]
+function tagOptions(records) {
+  return [...new Set(records.map((record) => recordTag(record)))]
     .sort((a, b) => a.localeCompare(b, "zh-CN"));
 }
 
-function renderRecommenderFilter(records) {
-  const recommenders = recommenderOptions(records);
-  if (!recommenders.length) {
-    recommenderFilter.innerHTML = "";
+function renderTagFilter(records) {
+  const tags = tagOptions(records);
+  if (!tags.length) {
+    tagFilter.innerHTML = "";
     return;
   }
 
   const buttons = [
     { value: "all", label: "全部", count: records.length },
-    ...recommenders.map((recommender) => ({
-      value: recommender,
-      label: recommender,
-      count: records.filter((record) => (record.recommender || "默认") === recommender).length,
+    ...tags.map((tag) => ({
+      value: tag,
+      label: tag,
+      count: records.filter((record) => recordTag(record) === tag).length,
     })),
   ];
 
-  if (currentRecommender !== "all" && !recommenders.includes(currentRecommender)) {
-    currentRecommender = "all";
+  if (currentTag !== "all" && !tags.includes(currentTag)) {
+    currentTag = "all";
   }
 
-  recommenderFilter.innerHTML = buttons
+  tagFilter.innerHTML = buttons
     .map((button) => `
       <button
         class="toggle-btn"
         type="button"
-        data-recommender="${escapeHtml(button.value)}"
-        aria-pressed="${button.value === currentRecommender ? "true" : "false"}"
+        data-tag="${escapeHtml(button.value)}"
+        aria-pressed="${button.value === currentTag ? "true" : "false"}"
       >
         ${escapeHtml(button.label)}<span class="toggle-count">${button.count}</span>
       </button>
@@ -1209,23 +1213,23 @@ function renderRecommenderFilter(records) {
     .join("");
 }
 
-function filterByRecommender(records) {
-  if (currentRecommender === "all") {
+function filterByTag(records) {
+  if (currentTag === "all") {
     return records;
   }
 
-  return records.filter((record) => (record.recommender || "默认") === currentRecommender);
+  return records.filter((record) => recordTag(record) === currentTag);
 }
 
-function syncRecommenderButtons() {
-  for (const button of recommenderFilter.querySelectorAll("[data-recommender]")) {
-    button.classList.toggle("active", button.dataset.recommender === currentRecommender);
+function syncTagButtons() {
+  for (const button of tagFilter.querySelectorAll("[data-tag]")) {
+    button.classList.toggle("active", button.dataset.tag === currentTag);
   }
 }
 
 function renderFilteredViews(records) {
   renderSummary(buildSummary(records));
-  syncRecommenderButtons();
+  syncTagButtons();
   syncTimelineRangeButtons();
   renderTimelineChart(records);
   renderTable(records);
@@ -1260,7 +1264,7 @@ function renderFailures(failures) {
         <article class="failure-item">
           <p class="failure-title">${title}</p>
           <p class="failure-detail">事件 ID：${failure.id || "--"}</p>
-          <p class="failure-detail">推荐人：${escapeHtml(failure.recommender || "默认")}</p>
+          <p class="failure-detail">标签：${escapeHtml(recordTag(failure))}</p>
           <p class="failure-detail">推荐时间：${[failure.recommend_date, failure.recommend_time].filter(Boolean).join(" ") || "--"}</p>
           <p class="failure-detail">失败原因：${failure.error}</p>
         </article>
@@ -1287,7 +1291,7 @@ function renderPendingRecords(records) {
         <article class="pending-item">
           <p class="failure-title">${title}</p>
           <p class="failure-detail">事件 ID：${record.id || "--"}</p>
-          <p class="failure-detail">推荐人：${escapeHtml(record.recommender || "默认")}</p>
+          <p class="failure-detail">标签：${escapeHtml(recordTag(record))}</p>
           <p class="failure-detail">推荐时间：${[record.recommend_date, record.recommend_time].filter(Boolean).join(" ") || "--"}</p>
           <p class="failure-detail">当前状态：${record.message}</p>
         </article>
@@ -1297,27 +1301,27 @@ function renderPendingRecords(records) {
 }
 
 function applyFilter() {
-  const recommenderRecords = filterByRecommender(allRecords);
+  const tagRecords = filterByTag(allRecords);
   const keyword = searchInput.value.trim().toLowerCase();
   if (!keyword) {
-    renderFilteredViews(recommenderRecords);
-    renderPendingRecords(filterByRecommender(allPendingRecords));
-    renderFailures(filterByRecommender(allFailures));
+    renderFilteredViews(tagRecords);
+    renderPendingRecords(filterByTag(allPendingRecords));
+    renderFailures(filterByTag(allFailures));
     return;
   }
 
-  const filtered = recommenderRecords.filter((record) => {
+  const filtered = tagRecords.filter((record) => {
     return (
       record.symbol.toLowerCase().includes(keyword) ||
       (record.query_symbol || "").toLowerCase().includes(keyword) ||
       (record.name || "").toLowerCase().includes(keyword) ||
-      (record.recommender || "").toLowerCase().includes(keyword)
+      recordTag(record).toLowerCase().includes(keyword)
     );
   });
 
   renderFilteredViews(filtered);
-  renderPendingRecords(filterByRecommender(allPendingRecords));
-  renderFailures(filterByRecommender(allFailures));
+  renderPendingRecords(filterByTag(allPendingRecords));
+  renderFailures(filterByTag(allFailures));
 }
 
 async function loadData() {
@@ -1331,7 +1335,7 @@ async function loadData() {
   allRecords = data.records || [];
   allPendingRecords = data.pending_records || [];
   allFailures = data.failures || [];
-  renderRecommenderFilter(allRecords);
+  renderTagFilter(allRecords);
   applyFilter();
   const refreshContext = data.refresh_context || {};
   const generatedAt = refreshContext.generated_at || data.generated_at || "--";
@@ -1340,13 +1344,13 @@ async function loadData() {
 }
 
 searchInput.addEventListener("input", applyFilter);
-recommenderFilter.addEventListener("click", (event) => {
-  const button = event.target.closest("button[data-recommender]");
+tagFilter.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-tag]");
   if (!button) {
     return;
   }
 
-  currentRecommender = button.dataset.recommender || "all";
+  currentTag = button.dataset.tag || "all";
   expandedGroups.clear();
   applyFilter();
 });

@@ -21,17 +21,17 @@
 最省事的录入方式不是手改 CSV，而是用本地命令行工具：
 
 ```bash
-python3 scripts/manage_recommendations.py add --recommender 群主A --code 600519 --name 贵州茅台 --recommend-date 2026-05-25 --recommend-time 10:23 --note 首次推荐 --refresh
-python3 scripts/manage_recommendations.py add --recommender 群主A --code 600519 --name 贵州茅台 --recommend-date 2026-05-25 --recommend-time 10:23 --recommend-price 1288.5 --note 历史补录 --refresh
+python3 scripts/manage_recommendations.py add --tag 标签A --code 600519 --name 贵州茅台 --recommend-date 2026-05-25 --recommend-time 10:23 --note 首次推荐 --refresh
+python3 scripts/manage_recommendations.py add --tag 标签A --code 600519 --name 贵州茅台 --recommend-date 2026-05-25 --recommend-time 10:23 --recommend-price 1288.5 --note 历史补录 --refresh
 python3 scripts/manage_recommendations.py list
-python3 scripts/manage_recommendations.py update --id 20260525-600519-1 --recommender 群主B --recommend-time 10:23 --recommend-price 1288.5 --note 二次观察 --refresh
+python3 scripts/manage_recommendations.py update --id 20260525-600519-1 --tag 标签B --recommend-time 10:23 --recommend-price 1288.5 --note 二次观察 --refresh
 python3 scripts/manage_recommendations.py remove --id 20260525-600519-1 --refresh
 ```
 
 说明：
 
 - `--code` 是主要参数名，支持 A 股和港股代码
-- `--recommender` 可选，推荐人名称；不填时归到 `默认`
+- `--tag` 可选，标签名称；不填时归到 `默认`
 - `--recommend-time` 可选，格式是 `HH:MM`，系统会尝试使用 1 分钟行情作为推荐价
 - `--recommend-price` 可选，用于历史补录或分钟行情不可回查时手工指定推荐价
 - `--refresh` 会顺手执行一次 `scripts/update_data.py`
@@ -42,16 +42,16 @@ python3 scripts/manage_recommendations.py remove --id 20260525-600519-1 --refres
 推荐记录存放在 `docs/data/recommendations.csv`，字段如下：
 
 ```csv
-id,recommender,symbol,name,recommend_date,recommend_time,recommend_price,note
+id,tag,symbol,name,recommend_date,recommend_time,recommend_price,note
 20260506-301666-1,默认,301666,大普微,2026-05-06,,,empty
-20260521-688820-1,群主A,688820,盛合晶微,2026-05-21,10:23,,empty
-20260525-603986-1,群主B,603986,兆易创新,2026-05-24,10:23,1288.5,二次推荐
+20260521-688820-1,标签A,688820,盛合晶微,2026-05-21,10:23,,empty
+20260525-603986-1,标签B,603986,兆易创新,2026-05-24,10:23,1288.5,二次推荐
 ```
 
 字段说明：
 
 - `id`：推荐事件唯一标识
-- `recommender`：推荐人；为空时按 `默认` 处理
+- `tag`：标签；为空时按 `默认` 处理
 - `symbol`：股票代码列名目前仍保留为 `symbol`
 - `name`：股票名称
 - `recommend_date`：你记录的推荐日期，格式必须是 `YYYY-MM-DD`
@@ -88,7 +88,7 @@ id,recommender,symbol,name,recommend_date,recommend_time,recommend_price,note
 展示规则：
 
 - 同一只股票多次推荐时，默认折叠为首条记录，可手动展开
-- 页面支持按推荐人筛选；每个推荐人下的股票分组彼此独立
+- 页面支持按标签筛选；每个标签下的股票分组彼此独立
 - 展开后，后续推荐会显示在同组内
 - 多次推荐的股票，在展开状态下才会显示“第 N 次推荐”
 - 5 日、10 日、20 日、最大涨幅、最大回撤都会额外显示对应价格

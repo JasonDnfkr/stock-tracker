@@ -1,4 +1,4 @@
-id,recommender,symbol,name,recommend_date,recommend_time,recommend_price,note
+id,tag,symbol,name,recommend_date,recommend_time,recommend_price,note
 20260506-301666-1,分组A,301666,大普微,2026-05-06,,,empty
 20260507-002709-1,分组A,002709,天赐材料,2026-05-07,,,empty
 20260508-001309-1,分组A,001309,德明利,2026-05-08,,,empty
