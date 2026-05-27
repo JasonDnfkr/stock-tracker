@@ -90,7 +90,8 @@ id,symbol,name,recommend_date,recommend_time,recommend_price,note
 - 多次推荐的股票，在展开状态下才会显示“第 N 次推荐”
 - 5 日、10 日、20 日、最大涨幅、最大回撤都会额外显示对应价格
 - 如果没有填写推荐时间，推荐价沿用推荐日收盘价；如果推荐日不是交易日，会显示成 `MM-DD(顺延)收盘`
-- 如果填写了推荐时间，推荐价会优先使用 1 分钟行情；无法回查历史分钟行情时，可填写 `recommend_price` 手工兜底
+- 如果填写了推荐时间，推荐价会优先使用 1 分钟行情，页面只显示时间，例如 `09:32`
+- 如果填写了 `recommend_price`，页面会显示 `09:32(手填)`；如果走日线收盘价，页面会显示 `MM-DD收盘`
 
 ## 异常和兜底
 
@@ -121,6 +122,12 @@ id,symbol,name,recommend_date,recommend_time,recommend_price,note
 ```bash
 python3 scripts/update_data.py
 ```
+
+刷新耗时说明：
+
+- 当前脚本按唯一股票串行请求行情，推荐事件越多、覆盖股票越多，刷新越久
+- 每只唯一股票至少请求一次日线；填写了 `recommend_time` 且没有 `recommend_price` 的记录会额外请求分钟行情
+- 脚本对每次行情请求保留了短暂限速等待，主要是为了降低免费接口压力，并不是因为每次都在失败重试
 
 启动本地静态服务：
 

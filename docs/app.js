@@ -98,7 +98,7 @@ function formatEntryDateLabel(entryDate, recommendDate) {
 
   const shortDate = formatShortDate(entryDate);
   if (recommendDate && entryDate !== recommendDate) {
-    return `${shortDate}(顺延)`;
+    return `${shortDate} (顺延)`;
   }
 
   return shortDate;
@@ -121,7 +121,7 @@ function formatEntryPriceMeta(record) {
   const sourceLabel = entryPriceSourceLabel(record.entry_price_source);
 
   if (entryTime) {
-    return sourceLabel ? `${entryTime}(${sourceLabel})` : entryTime;
+    return sourceLabel ? `${entryTime} (${sourceLabel})` : entryTime;
   }
 
   const dateLabel = formatEntryDateLabel(entryDate, recommendDate);
