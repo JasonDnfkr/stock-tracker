@@ -14,6 +14,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,6 +26,8 @@ TENCENT_A_CHART_URL = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=
 TENCENT_HK_CHART_URL = "https://web.ifzq.gtimg.cn/appstock/app/hkfqkline/get?param={symbol},day,,,{count},qfq"
 TENCENT_MINUTE_KLINE_URL = "https://ifzq.gtimg.cn/appstock/app/kline/mkline?param={symbol},m1,,{count}"
 TENCENT_MINUTE_QUERY_URL = "https://web.ifzq.gtimg.cn/appstock/app/minute/query?code={symbol}"
+QUOTE_TIMEOUT_SECONDS = 12
+QUOTE_RETRY_ATTEMPTS = 2
 
 
 class PendingTrackingError(RuntimeError):
@@ -348,7 +351,7 @@ def tencent_minute_history(symbol: str, target_date: dt.date, today: dt.date) ->
         "Accept": "application/json",
       },
     )
-    with urllib.request.urlopen(request, timeout=20) as response:
+    with urllib.request.urlopen(request, timeout=QUOTE_TIMEOUT_SECONDS) as response:
       payload = json.loads(response.read().decode("utf-8"))
 
     if payload.get("code") not in (0, "0"):
@@ -368,7 +371,7 @@ def tencent_minute_history(symbol: str, target_date: dt.date, today: dt.date) ->
       "Accept": "application/json",
     },
   )
-  with urllib.request.urlopen(request, timeout=20) as response:
+  with urllib.request.urlopen(request, timeout=QUOTE_TIMEOUT_SECONDS) as response:
     payload = json.loads(response.read().decode("utf-8"))
 
   if payload.get("code") not in (0, "0"):
@@ -403,7 +406,7 @@ def tencent_history(symbol: str, start_date: dt.date, end_date: dt.date) -> list
     },
   )
 
-  with urllib.request.urlopen(request, timeout=20) as response:
+  with urllib.request.urlopen(request, timeout=QUOTE_TIMEOUT_SECONDS) as response:
     payload = json.loads(response.read().decode("utf-8"))
 
   if payload.get("code") not in (0, "0"):
@@ -637,6 +640,105 @@ def build_summary(records: list[dict]) -> dict:
   }
 
 
+def append_pending_record(pending_records: list[dict], rec: Recommendation, message: str) -> None:
+  pending_records.append(
+    {
+      "id": rec.id,
+      "recommender": rec.recommender,
+      "symbol": rec.symbol,
+      "query_symbol": rec.query_symbol,
+      "name": rec.name,
+      "recommend_date": rec.recommend_date.isoformat(),
+      "recommend_time": rec.recommend_time.strftime("%H:%M") if rec.recommend_time else None,
+      "status": "pending_tracking",
+      "message": message,
+    }
+  )
+
+
+def append_failure(failures: list[dict], rec: Recommendation, error: Exception | str) -> None:
+  failures.append(
+    {
+      "id": rec.id,
+      "recommender": rec.recommender,
+      "symbol": rec.symbol,
+      "query_symbol": rec.query_symbol,
+      "name": rec.name,
+      "recommend_date": rec.recommend_date.isoformat(),
+      "recommend_time": rec.recommend_time.strftime("%H:%M") if rec.recommend_time else None,
+      "error": str(error),
+    }
+  )
+
+
+def with_retries(fetch_fn, *args):
+  last_error = None
+  for attempt in range(QUOTE_RETRY_ATTEMPTS):
+    try:
+      return fetch_fn(*args)
+    except Exception as exc:
+      last_error = exc
+      if attempt + 1 < QUOTE_RETRY_ATTEMPTS:
+        time.sleep(0.4 * (attempt + 1))
+  raise last_error
+
+
+def fetch_daily_bars_for_symbols(recommendations: list[Recommendation], today: dt.date, max_workers: int) -> tuple[dict[str, list[dict]], dict[str, Exception]]:
+  fetch_specs: dict[str, dt.date] = {}
+  for rec in recommendations:
+    start_date = rec.recommend_date - dt.timedelta(days=14)
+    current_start = fetch_specs.get(rec.query_symbol)
+    fetch_specs[rec.query_symbol] = min(current_start, start_date) if current_start else start_date
+
+  bars_cache: dict[str, list[dict]] = {}
+  errors: dict[str, Exception] = {}
+  if not fetch_specs:
+    return bars_cache, errors
+
+  worker_count = max(1, min(max_workers, len(fetch_specs)))
+  with ThreadPoolExecutor(max_workers=worker_count) as executor:
+    futures = {
+      executor.submit(with_retries, tencent_history, symbol, start_date, today): symbol
+      for symbol, start_date in fetch_specs.items()
+    }
+    for future in as_completed(futures):
+      symbol = futures[future]
+      try:
+        bars_cache[symbol] = future.result()
+      except Exception as exc:
+        errors[symbol] = exc
+
+  return bars_cache, errors
+
+
+def fetch_minute_bars_for_records(recommendations: list[Recommendation], today: dt.date, max_workers: int) -> tuple[dict[tuple[str, dt.date], list[dict]], dict[tuple[str, dt.date], Exception]]:
+  fetch_keys = sorted({
+    (rec.query_symbol, rec.recommend_date)
+    for rec in recommendations
+    if rec.recommend_time is not None and rec.recommend_price is None
+  })
+
+  minute_bars_cache: dict[tuple[str, dt.date], list[dict]] = {}
+  errors: dict[tuple[str, dt.date], Exception] = {}
+  if not fetch_keys:
+    return minute_bars_cache, errors
+
+  worker_count = max(1, min(max_workers, len(fetch_keys)))
+  with ThreadPoolExecutor(max_workers=worker_count) as executor:
+    futures = {
+      executor.submit(with_retries, tencent_minute_history, symbol, target_date, today): (symbol, target_date)
+      for symbol, target_date in fetch_keys
+    }
+    for future in as_completed(futures):
+      key = futures[future]
+      try:
+        minute_bars_cache[key] = future.result()
+      except Exception as exc:
+        errors[key] = exc
+
+  return minute_bars_cache, errors
+
+
 def main() -> int:
   parser = argparse.ArgumentParser(description="Update stock tracking metrics.")
   parser.add_argument(
@@ -649,6 +751,12 @@ def main() -> int:
     default="docs/data/metrics.json",
     help="Path to the generated metrics JSON file.",
   )
+  parser.add_argument(
+    "--max-workers",
+    type=int,
+    default=8,
+    help="Maximum concurrent quote requests. Use 1 for serial fetching.",
+  )
   args = parser.parse_args()
 
   input_path = Path(args.input)
@@ -659,57 +767,30 @@ def main() -> int:
   records = []
   today = dt.date.today()
   pending_records = []
-  bars_cache: dict[str, list[dict]] = {}
-  minute_bars_cache: dict[tuple[str, dt.date], list[dict]] = {}
+  max_workers = max(1, args.max_workers)
+  bars_cache, daily_errors = fetch_daily_bars_for_symbols(recommendations, today, max_workers)
+  minute_bars_cache, minute_errors = fetch_minute_bars_for_records(recommendations, today, max_workers)
 
   for rec in recommendations:
     try:
-      start_date = rec.recommend_date - dt.timedelta(days=14)
       bars = bars_cache.get(rec.query_symbol)
-      if bars is None:
-        bars = tencent_history(rec.query_symbol, start_date=start_date, end_date=today)
-        bars_cache[rec.query_symbol] = bars
-        time.sleep(0.2)
+      if rec.query_symbol in daily_errors:
+        raise daily_errors[rec.query_symbol]
       if not bars:
         raise RuntimeError("No market data returned")
 
       minute_bars = None
       if rec.recommend_time is not None and rec.recommend_price is None:
         minute_cache_key = (rec.query_symbol, rec.recommend_date)
+        if minute_cache_key in minute_errors:
+          raise minute_errors[minute_cache_key]
         minute_bars = minute_bars_cache.get(minute_cache_key)
-        if minute_bars is None:
-          minute_bars = tencent_minute_history(rec.query_symbol, rec.recommend_date, today)
-          minute_bars_cache[minute_cache_key] = minute_bars
-          time.sleep(0.2)
 
       records.append(compute_record(rec, bars, minute_bars))
     except PendingTrackingError as exc:
-      pending_records.append(
-        {
-          "id": rec.id,
-          "recommender": rec.recommender,
-          "symbol": rec.symbol,
-          "query_symbol": rec.query_symbol,
-          "name": rec.name,
-          "recommend_date": rec.recommend_date.isoformat(),
-          "recommend_time": rec.recommend_time.strftime("%H:%M") if rec.recommend_time else None,
-          "status": "pending_tracking",
-          "message": str(exc),
-        }
-      )
-    except (urllib.error.URLError, RuntimeError, ValueError) as exc:
-      failures.append(
-        {
-          "id": rec.id,
-          "recommender": rec.recommender,
-          "symbol": rec.symbol,
-          "query_symbol": rec.query_symbol,
-          "name": rec.name,
-          "recommend_date": rec.recommend_date.isoformat(),
-          "recommend_time": rec.recommend_time.strftime("%H:%M") if rec.recommend_time else None,
-          "error": str(exc),
-        }
-      )
+      append_pending_record(pending_records, rec, str(exc))
+    except Exception as exc:
+      append_failure(failures, rec, exc)
 
   annotate_recommendation_sequences(records)
   records.sort(key=lambda item: item["recommend_date"], reverse=True)

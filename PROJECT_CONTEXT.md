@@ -347,8 +347,8 @@ tradeoff：
 
 - 数据源当前依赖腾讯行情接口；如果接口字段、可用性或盘中返回口径变化，会影响 `metrics.json` 计算结果并进入 failures
 - `metrics.json` 是生成产物，如果修改了 `recommendations.csv` 但没跑 `scripts/update_data.py`，本地页面会和 CSV 不一致
-- `scripts/update_data.py` 当前按唯一股票串行抓取行情，每只唯一股票至少一次日线请求；有 `recommend_time` 且无 `recommend_price` 的记录会额外请求分钟行情
-- 刷新慢主要来自串行网络请求和每次请求后的 `time.sleep(0.2)` 限速，不是因为当前逻辑在大量失败重试
+- `scripts/update_data.py` 当前按唯一股票并发抓取行情，默认 `--max-workers 8`；有 `recommend_time` 且无 `recommend_price` 的记录会额外并发请求分钟行情
+- 腾讯接口偶发尾延迟时会触发轻量重试；如果请求失败仍会按推荐事件进入 failures，不打断整次刷新
 - GitHub Pages 是静态部署，无法直接在网页前端写入数据
 - 当前没有自动化测试，只做语法和手工页面验证
 - 当前分组折叠状态只保存在前端内存中，刷新页面会丢失
@@ -612,6 +612,8 @@ tradeoff：
 - `average(values: list[float | None]) -> float | None`
 - `refresh_context(now: dt.datetime) -> dict`
 - `build_summary(records: list[dict]) -> dict`
+- `fetch_daily_bars_for_symbols(recommendations: list[Recommendation], today: dt.date, max_workers: int) -> tuple[dict[str, list[dict]], dict[str, Exception]]`
+- `fetch_minute_bars_for_records(recommendations: list[Recommendation], today: dt.date, max_workers: int) -> tuple[dict[tuple[str, dt.date], list[dict]], dict[tuple[str, dt.date], Exception]]`
 - `main() -> int`
 
 ### `scripts/manage_recommendations.py`
@@ -900,6 +902,7 @@ id,recommender,symbol,name,recommend_date,recommend_time,recommend_price,note
 
 ```bash
 python3 scripts/update_data.py
+python3 scripts/update_data.py --max-workers 4
 ```
 
 本地录入工具：

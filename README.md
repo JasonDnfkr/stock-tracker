@@ -124,13 +124,14 @@ id,recommender,symbol,name,recommend_date,recommend_time,recommend_price,note
 
 ```bash
 python3 scripts/update_data.py
+python3 scripts/update_data.py --max-workers 4
 ```
 
 刷新耗时说明：
 
-- 当前脚本按唯一股票串行请求行情，推荐事件越多、覆盖股票越多，刷新越久
+- 当前脚本按唯一股票并发请求行情，默认 `--max-workers 8`
 - 每只唯一股票至少请求一次日线；填写了 `recommend_time` 且没有 `recommend_price` 的记录会额外请求分钟行情
-- 脚本对每次行情请求保留了短暂限速等待，主要是为了降低免费接口压力，并不是因为每次都在失败重试
+- 如果腾讯接口偶发超时，脚本会对单次请求做轻量重试；如果你想更保守，可以把 `--max-workers` 调小
 
 启动本地静态服务：
 
