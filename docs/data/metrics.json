@@ -1,20 +1,20 @@
 {
-  "generated_at": "2026-05-28 02:15:43",
+  "generated_at": "2026-05-28 02:45:30",
   "refresh_context": {
     "trigger": "local",
     "trigger_label": "本地刷新",
-    "generated_at": "2026-05-28 02:15:43"
+    "generated_at": "2026-05-28 02:45:30"
   },
   "summary": {
-    "total_picks": 30,
-    "unique_symbols": 28,
+    "total_picks": 31,
+    "unique_symbols": 29,
     "summary_basis": "first_recommendation_by_tag_symbol",
-    "summary_basis_count": 28,
-    "profitable_picks": 20,
-    "win_rate": 0.714286,
-    "average_return": 0.090569,
-    "average_return_5d": 0.157119,
-    "average_return_10d": 0.33132,
+    "summary_basis_count": 29,
+    "profitable_picks": 21,
+    "win_rate": 0.724138,
+    "average_return": 0.087505,
+    "average_return_5d": 0.140483,
+    "average_return_10d": 0.265399,
     "average_return_20d": null
   },
   "records": [
@@ -829,6 +829,36 @@
       "recommendation_count_for_symbol": 1
     },
     {
+      "id": "20260513-601138-1",
+      "tag": "分组B",
+      "symbol": "601138",
+      "query_symbol": "601138.SS",
+      "name": "工业富联",
+      "note": "首次推荐",
+      "recommend_date": "2026-05-13",
+      "recommend_time": "11:15",
+      "entry_date": "2026-05-13",
+      "entry_time": "11:15",
+      "entry_price": 69.96,
+      "entry_price_source": "manual",
+      "current_price": 70.08,
+      "return_rate": 0.001715,
+      "return_5d": -0.025872,
+      "return_5d_price": 68.15,
+      "return_10d": 0.001715,
+      "return_10d_price": 70.08,
+      "return_20d": null,
+      "return_20d_price": null,
+      "max_gain": 0.057747,
+      "max_gain_price": 74.0,
+      "max_drawdown": -0.075381,
+      "max_drawdown_price": 65.5,
+      "is_profitable": true,
+      "current_date": "2026-05-27",
+      "recommendation_sequence": 1,
+      "recommendation_count_for_symbol": 1
+    },
+    {
       "id": "20260508-001309-1",
       "tag": "分组A",
       "symbol": "001309",
@@ -1207,6 +1237,18 @@
       "latest_return": 0.036956,
       "first_recommend_date": "2026-05-17",
       "latest_recommend_date": "2026-05-17"
+    },
+    {
+      "symbol": "601138",
+      "tag": "分组B",
+      "name": "工业富联",
+      "recommendation_count": 1,
+      "profitable_count": 1,
+      "win_rate": 1.0,
+      "average_return": 0.001715,
+      "latest_return": 0.001715,
+      "first_recommend_date": "2026-05-13",
+      "latest_recommend_date": "2026-05-13"
     },
     {
       "symbol": "002119",
