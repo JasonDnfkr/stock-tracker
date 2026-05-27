@@ -256,6 +256,25 @@ function recordTag(record) {
   return record.tag || "默认";
 }
 
+function shouldShowInlineTag() {
+  return currentTag === "all";
+}
+
+function renderTagBadge(record) {
+  return shouldShowInlineTag() ? `<span class="tag-badge">${escapeHtml(recordTag(record))}</span>` : "";
+}
+
+function renderRecommendationSubline(record, showSequenceHint = false) {
+  const parts = [record.recommend_date];
+  if (shouldShowInlineTag()) {
+    parts.push(escapeHtml(recordTag(record)));
+  }
+  if (showSequenceHint) {
+    parts.push(`第 ${record.recommendation_sequence} 次`);
+  }
+  return parts.filter(Boolean).join(" · ");
+}
+
 function average(values) {
   const valid = values.filter((value) => value !== null && value !== undefined && !Number.isNaN(value));
   if (!valid.length) {
@@ -1036,7 +1055,7 @@ function renderGroupedView(records) {
                 <div class="stock-cell compact">
                   <span class="stock-symbol">${record.symbol}</span>
                   <span class="stock-name" title="事件 ID：${record.id}">${record.name || "--"}</span>
-                  <span class="tag-badge">${escapeHtml(recordTag(record))}</span>
+                  ${renderTagBadge(record)}
                   ${
                     group.recommendation_count > 1
                       ? `
@@ -1058,9 +1077,7 @@ function renderGroupedView(records) {
                 <div class="stock-cell compact">
                   <span class="group-placeholder"></span>
                   <span class="stock-subline">
-                    ${record.recommend_date}
-                    · ${escapeHtml(recordTag(record))}
-                    ${showSequenceHint ? ` · 第 ${record.recommendation_sequence} 次` : ""}
+                    ${renderRecommendationSubline(record, showSequenceHint)}
                   </span>
                 </div>
               `;
@@ -1074,7 +1091,7 @@ function renderGroupedView(records) {
                       <div class="stock-cell compact">
                         <span class="stock-symbol">${record.symbol}</span>
                         <span class="stock-name">${record.name || "--"}</span>
-                        <span class="tag-badge">${escapeHtml(recordTag(record))}</span>
+                        ${renderTagBadge(record)}
                         ${
                           group.recommendation_count > 1
                             ? `
@@ -1091,9 +1108,7 @@ function renderGroupedView(records) {
                             : ""
                         }
                         <span class="stock-subline">
-                          ${record.recommend_date}
-                          · ${escapeHtml(recordTag(record))}
-                          ${showSequenceHint ? ` · 第 ${record.recommendation_sequence} 次` : ""}
+                          ${renderRecommendationSubline(record, showSequenceHint)}
                         </span>
                       </div>
                     `
@@ -1146,7 +1161,7 @@ function renderTable(records) {
                     ? `<span class="repeat-badge">第 ${record.recommendation_sequence} 次推荐</span>`
                     : ""
                 }
-                <span class="tag-badge">${escapeHtml(recordTag(record))}</span>
+                ${renderTagBadge(record)}
               </div>
               <span class="stock-subline">${record.recommend_date}</span>
             </div>
