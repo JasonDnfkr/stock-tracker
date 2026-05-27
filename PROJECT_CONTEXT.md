@@ -45,6 +45,7 @@
 - “待跟踪”与“失败记录”分流展示
 - 本地管理工具 `scripts/manage_recommendations.py`
 - 推荐时刻 `recommend_time` 与推荐价 `recommend_price`
+- 推荐人 `recommender` 分类筛选
 - `5日 / 10日 / 20日收益`
 - `最大涨幅 / 最大回撤`
 - A 股红涨绿跌配色
@@ -91,6 +92,7 @@
 - 历史记录支持填写 `recommend_price` 作为分钟行情无法回查时的手工兜底价
 - 页面展示规则：自动分钟价显示为 `09:32`，手工价显示为 `09:32(手填)`，日线价显示为 `MM-DD收盘` 或 `MM-DD(顺延)收盘`
 - 当前已添加深科技 `000021`，推荐时间为 `2026-05-27 09:32`，生成价来源为 `minute_1m`
+- 支持按推荐人筛选视图；同一股票在不同推荐人名下是不同展示分组和不同 summary 样本
 
 ## 哪些方案被否决，以及为什么
 
@@ -564,7 +566,7 @@ tradeoff：
 
 关键字段：
 
-- `id,symbol,name,recommend_date,recommend_time,recommend_price,note`
+- `id,recommender,symbol,name,recommend_date,recommend_time,recommend_price,note`
 
 ### `docs/data/metrics.json`
 
@@ -622,7 +624,7 @@ tradeoff：
 
 关键数据结构：
 
-- `CSV_FIELDS = ["id", "symbol", "name", "recommend_date", "recommend_time", "recommend_price", "note"]`
+- `CSV_FIELDS = ["id", "recommender", "symbol", "name", "recommend_date", "recommend_time", "recommend_price", "note"]`
 - `@dataclass class RecommendationRow`
 
 关键函数签名：
@@ -647,9 +649,9 @@ tradeoff：
 CLI contract：
 
 - `list --code`
-- `add --code --name --recommend-date [--recommend-time] [--recommend-price] [--note] [--refresh]`
+- `add --code --name [--recommender] --recommend-date [--recommend-time] [--recommend-price] [--note] [--refresh]`
 - `remove --id [--refresh]`
-- `update --id [--code] [--name] [--recommend-date] [--recommend-time] [--recommend-price] [--clear-recommend-time] [--clear-recommend-price] [--note] [--new-id] [--regenerate-id] [--refresh]`
+- `update --id [--code] [--recommender] [--name] [--recommend-date] [--recommend-time] [--recommend-price] [--clear-recommend-time] [--clear-recommend-price] [--note] [--new-id] [--regenerate-id] [--refresh]`
 
 ## 最近修改了哪些文件
 
@@ -682,12 +684,13 @@ CLI contract：
 表头固定为：
 
 ```csv
-id,symbol,name,recommend_date,recommend_time,recommend_price,note
+id,recommender,symbol,name,recommend_date,recommend_time,recommend_price,note
 ```
 
 字段含义：
 
 - `id`：推荐事件唯一 ID
+- `recommender`：推荐人；为空或旧 CSV 缺失该列时归为 `默认`
 - `symbol`：股票代码。CSV 里字段名仍然是 `symbol`
 - `name`：股票名称
 - `recommend_date`：推荐日期，要求 `YYYY-MM-DD`
@@ -744,6 +747,7 @@ id,symbol,name,recommend_date,recommend_time,recommend_price,note
 每一项代表一个推荐事件。当前字段：
 
 - `id: string`
+- `recommender: string`
 - `symbol: string`
 - `query_symbol: string`
 - `name: string`
@@ -776,6 +780,7 @@ id,symbol,name,recommend_date,recommend_time,recommend_price,note
 - `entry_date`：实际建仓对应的交易日；若推荐日不是交易日，会顺延
 - `entry_time`：实际使用的分钟行情时间；手工价且填写了推荐时间时等于推荐时间
 - `entry_price_source`：`manual` 为手工价，`minute_1m` 为 1 分钟行情价，`daily_close` 为日收盘价
+- summary、分组视图和推荐次数序号都按 `recommender + symbol` 作为分组单位，不能跨推荐人合并
 - `query_symbol`：内部统一标准代码；A 股如 `600584.SS`，港股如 `0700.HK`
 - `recommendation_sequence`：该股票按时间排序后的第几次推荐
 - `recommendation_count_for_symbol`：该股票在全量事件中的推荐总次数
@@ -785,6 +790,7 @@ id,symbol,name,recommend_date,recommend_time,recommend_price,note
 这是为可能的分组/汇总展示保留的派生数据。当前字段：
 
 - `symbol`
+- `recommender`
 - `name`
 - `recommendation_count`
 - `profitable_count`
@@ -900,7 +906,7 @@ python3 scripts/update_data.py
 
 ```bash
 python3 scripts/manage_recommendations.py list
-python3 scripts/manage_recommendations.py add --code 600519 --name 贵州茅台 --recommend-date 2026-05-25 --recommend-time 10:23 --note 首次推荐 --refresh
+python3 scripts/manage_recommendations.py add --recommender 群主A --code 600519 --name 贵州茅台 --recommend-date 2026-05-25 --recommend-time 10:23 --note 首次推荐 --refresh
 python3 scripts/manage_recommendations.py update --id 20260525-600519-1 --recommend-time 10:23 --recommend-price 1288.5 --refresh
 ```
 

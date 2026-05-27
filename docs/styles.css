@@ -504,6 +504,17 @@ h1 {
   justify-content: end;
 }
 
+.recommender-filter {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 999px;
+  background: rgba(98, 19, 34, 0.06);
+  border: 1px solid rgba(110, 23, 33, 0.1);
+}
+
 .search-box input {
   width: min(320px, 100%);
   padding: 12px 14px;
@@ -539,6 +550,12 @@ h1 {
   color: white;
   background: linear-gradient(135deg, #b62839, #dd7048);
   box-shadow: 0 8px 18px rgba(182, 40, 57, 0.22);
+}
+
+.toggle-count {
+  margin-left: 6px;
+  font-size: 0.78em;
+  opacity: 0.78;
 }
 
 .table-wrap {
@@ -658,6 +675,19 @@ th {
   color: var(--muted);
   background: rgba(98, 19, 34, 0.05);
   border: 1px solid rgba(110, 23, 33, 0.1);
+}
+
+.recommender-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--accent);
+  background: rgba(198, 31, 53, 0.08);
+  border: 1px solid rgba(198, 31, 53, 0.12);
 }
 
 .price-cell {

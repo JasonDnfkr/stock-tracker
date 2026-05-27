@@ -5,6 +5,7 @@ const recordsBody = document.getElementById("records-body");
 const stockGroupList = document.getElementById("stock-group-list");
 const updatedAt = document.getElementById("updated-at");
 const searchInput = document.getElementById("search-input");
+const recommenderFilter = document.getElementById("recommender-filter");
 const timelineRangeControls = document.getElementById("timeline-range-controls");
 const emptyState = document.getElementById("empty-state");
 const groupedEmptyState = document.getElementById("grouped-empty-state");
@@ -22,8 +23,11 @@ chartTooltip.className = "chart-tooltip hidden";
 document.body.append(chartTooltip);
 
 let allRecords = [];
+let allPendingRecords = [];
+let allFailures = [];
 let currentView = "grouped";
 let currentTimelineRange = "20d";
+let currentRecommender = "all";
 const expandedGroups = new Set();
 let activeTooltipId = null;
 let activeChartLabelId = null;
@@ -248,6 +252,45 @@ function expandCompressedReturn(value) {
   return sign * value * value;
 }
 
+function average(values) {
+  const valid = values.filter((value) => value !== null && value !== undefined && !Number.isNaN(value));
+  if (!valid.length) {
+    return null;
+  }
+
+  return valid.reduce((sum, value) => sum + value, 0) / valid.length;
+}
+
+function buildSummary(records) {
+  const firstRecordsBySymbol = new Map();
+  [...records]
+    .sort((a, b) => {
+      if (a.recommend_date !== b.recommend_date) {
+        return a.recommend_date.localeCompare(b.recommend_date);
+      }
+      return a.id.localeCompare(b.id);
+    })
+    .forEach((record) => {
+      const summaryKey = `${record.recommender || "默认"}|${record.symbol}`;
+      if (!firstRecordsBySymbol.has(summaryKey)) {
+        firstRecordsBySymbol.set(summaryKey, record);
+      }
+    });
+
+  const summaryRecords = [...firstRecordsBySymbol.values()];
+  const profitable = summaryRecords.filter((record) => record.is_profitable).length;
+
+  return {
+    total_picks: records.length,
+    unique_symbols: new Set(records.map((record) => record.symbol)).size,
+    profitable_picks: profitable,
+    win_rate: summaryRecords.length ? profitable / summaryRecords.length : null,
+    average_return: average(summaryRecords.map((record) => record.return_rate)),
+    average_return_5d: average(summaryRecords.map((record) => record.return_5d)),
+    average_return_10d: average(summaryRecords.map((record) => record.return_10d)),
+  };
+}
+
 function renderSummary(summary) {
   const cards = [
     { label: "推荐总数", value: summary.total_picks, valueClass: "", hint: "" },
@@ -330,7 +373,7 @@ function filterTimelineRecords(records) {
     return records;
   }
 
-  const latestTimestamp = latestRecommendTimestamp(allRecords);
+  const latestTimestamp = latestRecommendTimestamp(records);
   if (latestTimestamp === null) {
     return records;
   }
@@ -729,6 +772,7 @@ function renderTimelineChart(records) {
                   class="chart-point ${pointClass}"
                   data-symbol="${escapeHtml(record.symbol)}"
                   data-name="${escapeHtml(record.name || "--")}"
+                  data-recommender="${escapeHtml(record.recommender || "默认")}"
                   data-recommend-date="${escapeHtml(formatTooltipDate(record.recommend_date))}"
                   data-recommend-time="${escapeHtml(record.recommend_time || "")}"
                   data-entry-price="${escapeHtml(formatNumber(record.entry_price))}"
@@ -861,6 +905,7 @@ function renderChartTooltip(target) {
   const {
     symbol = "--",
     name = "--",
+    recommender = "默认",
     recommendDate = "--",
     recommendTime = "",
     entryPrice = "--",
@@ -876,7 +921,7 @@ function renderChartTooltip(target) {
     returnTwentyDayValue = "",
   } = target.dataset;
 
-  const tooltipKey = `${symbol}-${recommendDate}-${returnRate}`;
+  const tooltipKey = `${recommender}-${symbol}-${recommendDate}-${returnRate}`;
   if (activeTooltipId === tooltipKey && !chartTooltip.classList.contains("hidden")) {
     return;
   }
@@ -888,6 +933,7 @@ function renderChartTooltip(target) {
 
   chartTooltip.innerHTML = `
     <div class="chart-tooltip-title">${escapeHtml(symbol)} ${escapeHtml(name)}</div>
+    <div class="chart-tooltip-row"><span>推荐人</span><strong>${escapeHtml(recommender)}</strong></div>
     <div class="chart-tooltip-row"><span>推荐时间</span><strong>${escapeHtml([recommendDate, recommendTime].filter(Boolean).join(" ") || "--")}</strong></div>
     <div class="chart-tooltip-row"><span>推荐价</span><strong>${escapeHtml(entryPrice)}${entryTime || recommendTime || entryPriceSource ? ` (${escapeHtml([entryTime || recommendTime, entryPriceSource].filter(Boolean).join(" · "))})` : ""}</strong></div>
     <div class="chart-tooltip-row"><span>当前收益</span><strong class="${tooltipMetricClass(parsedReturnRate)}">${escapeHtml(returnRate)}</strong></div>
@@ -902,10 +948,11 @@ function renderChartTooltip(target) {
 function stockSummaryMap(records) {
   const grouped = new Map();
   for (const record of records) {
-    if (!grouped.has(record.symbol)) {
-      grouped.set(record.symbol, []);
+    const groupKey = `${record.recommender || "默认"}|${record.symbol}`;
+    if (!grouped.has(groupKey)) {
+      grouped.set(groupKey, []);
     }
-    grouped.get(record.symbol).push(record);
+    grouped.get(groupKey).push(record);
   }
 
   for (const symbolRecords of grouped.values()) {
@@ -924,10 +971,12 @@ function buildGroupedStocks(records) {
   const grouped = stockSummaryMap(records);
   const groups = [];
 
-  for (const [symbol, symbolRecords] of grouped.entries()) {
+  for (const [groupKey, symbolRecords] of grouped.entries()) {
     const latestRecord = [...symbolRecords].sort((a, b) => b.recommend_date.localeCompare(a.recommend_date))[0];
     groups.push({
-      symbol,
+      key: groupKey,
+      symbol: latestRecord?.symbol || "--",
+      recommender: latestRecord?.recommender || "默认",
       name: latestRecord?.name || "--",
       records: symbolRecords,
       recommendation_count: symbolRecords.length,
@@ -941,6 +990,9 @@ function buildGroupedStocks(records) {
     }
     if (b.latest_recommend_date !== a.latest_recommend_date) {
       return b.latest_recommend_date.localeCompare(a.latest_recommend_date);
+    }
+    if (a.recommender !== b.recommender) {
+      return a.recommender.localeCompare(b.recommender, "zh-CN");
     }
     return a.symbol.localeCompare(b.symbol);
   });
@@ -968,7 +1020,7 @@ function renderGroupedView(records) {
           const profitClass = record.is_profitable ? "profit" : "loss";
           const profitLabel = record.is_profitable ? "盈利" : "亏损";
           const isGroupStart = index === 0;
-          const isExpanded = expandedGroups.has(group.symbol);
+          const isExpanded = expandedGroups.has(group.key);
           const showSequenceHint = group.recommendation_count > 1 && isExpanded;
           const rowStateClass = isGroupStart
             ? "group-start-row"
@@ -980,13 +1032,14 @@ function renderGroupedView(records) {
                 <div class="stock-cell compact">
                   <span class="stock-symbol">${record.symbol}</span>
                   <span class="stock-name" title="事件 ID：${record.id}">${record.name || "--"}</span>
+                  <span class="recommender-badge">${escapeHtml(record.recommender || "默认")}</span>
                   ${
                     group.recommendation_count > 1
                       ? `
                         <button
                           class="group-toggle-btn"
                           type="button"
-                          data-group-symbol="${group.symbol}"
+                          data-group-key="${escapeHtml(group.key)}"
                           aria-expanded="${isExpanded ? "true" : "false"}"
                           aria-label="${isExpanded ? "收起后续推荐记录" : `展开其余 ${group.recommendation_count - 1} 条推荐记录`}"
                         >
@@ -1002,6 +1055,7 @@ function renderGroupedView(records) {
                   <span class="group-placeholder"></span>
                   <span class="stock-subline">
                     ${record.recommend_date}
+                    · ${escapeHtml(record.recommender || "默认")}
                     ${showSequenceHint ? ` · 第 ${record.recommendation_sequence} 次` : ""}
                   </span>
                 </div>
@@ -1016,13 +1070,14 @@ function renderGroupedView(records) {
                       <div class="stock-cell compact">
                         <span class="stock-symbol">${record.symbol}</span>
                         <span class="stock-name">${record.name || "--"}</span>
+                        <span class="recommender-badge">${escapeHtml(record.recommender || "默认")}</span>
                         ${
                           group.recommendation_count > 1
                             ? `
                               <button
                                 class="group-toggle-btn"
                                 type="button"
-                                data-group-symbol="${group.symbol}"
+                                data-group-key="${escapeHtml(group.key)}"
                                 aria-expanded="${isExpanded ? "true" : "false"}"
                                 aria-label="${isExpanded ? "收起后续推荐记录" : `展开其余 ${group.recommendation_count - 1} 条推荐记录`}"
                               >
@@ -1033,6 +1088,7 @@ function renderGroupedView(records) {
                         }
                         <span class="stock-subline">
                           ${record.recommend_date}
+                          · ${escapeHtml(record.recommender || "默认")}
                           ${showSequenceHint ? ` · 第 ${record.recommendation_sequence} 次` : ""}
                         </span>
                       </div>
@@ -1086,6 +1142,7 @@ function renderTable(records) {
                     ? `<span class="repeat-badge">第 ${record.recommendation_sequence} 次推荐</span>`
                     : ""
                 }
+                <span class="recommender-badge">${escapeHtml(record.recommender || "默认")}</span>
               </div>
               <span class="stock-subline">${record.recommend_date}</span>
             </div>
@@ -1113,7 +1170,62 @@ function syncViewButtons() {
   eventViewBtn.classList.toggle("active", currentView === "event");
 }
 
+function recommenderOptions(records) {
+  return [...new Set(records.map((record) => record.recommender || "默认"))]
+    .sort((a, b) => a.localeCompare(b, "zh-CN"));
+}
+
+function renderRecommenderFilter(records) {
+  const recommenders = recommenderOptions(records);
+  if (!recommenders.length) {
+    recommenderFilter.innerHTML = "";
+    return;
+  }
+
+  const buttons = [
+    { value: "all", label: "全部", count: records.length },
+    ...recommenders.map((recommender) => ({
+      value: recommender,
+      label: recommender,
+      count: records.filter((record) => (record.recommender || "默认") === recommender).length,
+    })),
+  ];
+
+  if (currentRecommender !== "all" && !recommenders.includes(currentRecommender)) {
+    currentRecommender = "all";
+  }
+
+  recommenderFilter.innerHTML = buttons
+    .map((button) => `
+      <button
+        class="toggle-btn"
+        type="button"
+        data-recommender="${escapeHtml(button.value)}"
+        aria-pressed="${button.value === currentRecommender ? "true" : "false"}"
+      >
+        ${escapeHtml(button.label)}<span class="toggle-count">${button.count}</span>
+      </button>
+    `)
+    .join("");
+}
+
+function filterByRecommender(records) {
+  if (currentRecommender === "all") {
+    return records;
+  }
+
+  return records.filter((record) => (record.recommender || "默认") === currentRecommender);
+}
+
+function syncRecommenderButtons() {
+  for (const button of recommenderFilter.querySelectorAll("[data-recommender]")) {
+    button.classList.toggle("active", button.dataset.recommender === currentRecommender);
+  }
+}
+
 function renderFilteredViews(records) {
+  renderSummary(buildSummary(records));
+  syncRecommenderButtons();
   syncTimelineRangeButtons();
   renderTimelineChart(records);
   renderTable(records);
@@ -1121,11 +1233,11 @@ function renderFilteredViews(records) {
   syncViewButtons();
 }
 
-function toggleGroup(symbol) {
-  if (expandedGroups.has(symbol)) {
-    expandedGroups.delete(symbol);
+function toggleGroup(groupKey) {
+  if (expandedGroups.has(groupKey)) {
+    expandedGroups.delete(groupKey);
   } else {
-    expandedGroups.add(symbol);
+    expandedGroups.add(groupKey);
   }
   applyFilter();
 }
@@ -1148,6 +1260,7 @@ function renderFailures(failures) {
         <article class="failure-item">
           <p class="failure-title">${title}</p>
           <p class="failure-detail">事件 ID：${failure.id || "--"}</p>
+          <p class="failure-detail">推荐人：${escapeHtml(failure.recommender || "默认")}</p>
           <p class="failure-detail">推荐时间：${[failure.recommend_date, failure.recommend_time].filter(Boolean).join(" ") || "--"}</p>
           <p class="failure-detail">失败原因：${failure.error}</p>
         </article>
@@ -1174,6 +1287,7 @@ function renderPendingRecords(records) {
         <article class="pending-item">
           <p class="failure-title">${title}</p>
           <p class="failure-detail">事件 ID：${record.id || "--"}</p>
+          <p class="failure-detail">推荐人：${escapeHtml(record.recommender || "默认")}</p>
           <p class="failure-detail">推荐时间：${[record.recommend_date, record.recommend_time].filter(Boolean).join(" ") || "--"}</p>
           <p class="failure-detail">当前状态：${record.message}</p>
         </article>
@@ -1183,21 +1297,27 @@ function renderPendingRecords(records) {
 }
 
 function applyFilter() {
+  const recommenderRecords = filterByRecommender(allRecords);
   const keyword = searchInput.value.trim().toLowerCase();
   if (!keyword) {
-    renderFilteredViews(allRecords);
+    renderFilteredViews(recommenderRecords);
+    renderPendingRecords(filterByRecommender(allPendingRecords));
+    renderFailures(filterByRecommender(allFailures));
     return;
   }
 
-  const filtered = allRecords.filter((record) => {
+  const filtered = recommenderRecords.filter((record) => {
     return (
       record.symbol.toLowerCase().includes(keyword) ||
       (record.query_symbol || "").toLowerCase().includes(keyword) ||
-      (record.name || "").toLowerCase().includes(keyword)
+      (record.name || "").toLowerCase().includes(keyword) ||
+      (record.recommender || "").toLowerCase().includes(keyword)
     );
   });
 
   renderFilteredViews(filtered);
+  renderPendingRecords(filterByRecommender(allPendingRecords));
+  renderFailures(filterByRecommender(allFailures));
 }
 
 async function loadData() {
@@ -1209,10 +1329,10 @@ async function loadData() {
 
   const data = await response.json();
   allRecords = data.records || [];
-  renderSummary(data.summary || {});
-  renderFilteredViews(allRecords);
-  renderPendingRecords(data.pending_records || []);
-  renderFailures(data.failures || []);
+  allPendingRecords = data.pending_records || [];
+  allFailures = data.failures || [];
+  renderRecommenderFilter(allRecords);
+  applyFilter();
   const refreshContext = data.refresh_context || {};
   const generatedAt = refreshContext.generated_at || data.generated_at || "--";
   const triggerLabel = refreshContext.trigger_label || "未知触发";
@@ -1220,12 +1340,22 @@ async function loadData() {
 }
 
 searchInput.addEventListener("input", applyFilter);
+recommenderFilter.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-recommender]");
+  if (!button) {
+    return;
+  }
+
+  currentRecommender = button.dataset.recommender || "all";
+  expandedGroups.clear();
+  applyFilter();
+});
 stockGroupList.addEventListener("click", (event) => {
   const button = event.target.closest(".group-toggle-btn");
   if (!button) {
     return;
   }
-  toggleGroup(button.dataset.groupSymbol || "");
+  toggleGroup(button.dataset.groupKey || "");
 });
 groupedViewBtn.addEventListener("click", () => {
   currentView = "grouped";

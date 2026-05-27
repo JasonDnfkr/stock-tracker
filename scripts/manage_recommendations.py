@@ -10,10 +10,10 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from update_data import normalize_symbol, parse_recommend_price, parse_recommend_time, sanitize_id, validate_symbol
+from update_data import normalize_recommender, normalize_symbol, parse_recommend_price, parse_recommend_time, sanitize_id, validate_symbol
 
 
-CSV_FIELDS = ["id", "symbol", "name", "recommend_date", "recommend_time", "recommend_price", "note"]
+CSV_FIELDS = ["id", "recommender", "symbol", "name", "recommend_date", "recommend_time", "recommend_price", "note"]
 DEFAULT_CSV_PATH = Path("docs/data/recommendations.csv")
 DEFAULT_METRICS_SCRIPT = Path("scripts/update_data.py")
 
@@ -21,6 +21,7 @@ DEFAULT_METRICS_SCRIPT = Path("scripts/update_data.py")
 @dataclass
 class RecommendationRow:
     id: str
+    recommender: str
     symbol: str
     name: str
     recommend_date: str
@@ -38,6 +39,7 @@ def read_rows(csv_path: Path) -> list[RecommendationRow]:
         return [
             RecommendationRow(
                 id=(row.get("id") or "").strip(),
+                recommender=normalize_recommender(row.get("recommender") or ""),
                 symbol=(row.get("symbol") or "").strip(),
                 name=(row.get("name") or "").strip(),
                 recommend_date=(row.get("recommend_date") or "").strip(),
@@ -61,6 +63,7 @@ def write_rows(csv_path: Path, rows: list[RecommendationRow]) -> None:
             writer.writerow(
                 {
                     "id": row.id,
+                    "recommender": row.recommender,
                     "symbol": row.symbol,
                     "name": row.name,
                     "recommend_date": row.recommend_date,
@@ -133,6 +136,7 @@ def render_table(rows: list[RecommendationRow]) -> str:
 
     widths = {
         "id": max(len("id"), *(len(row.id) for row in rows)),
+        "recommender": max(len("recommender"), *(len(row.recommender) for row in rows)),
         "symbol": max(len("symbol"), *(len(row.symbol) for row in rows)),
         "name": max(len("name"), *(len(row.name) for row in rows)),
         "recommend_date": len("recommend_date"),
@@ -147,6 +151,7 @@ def render_table(rows: list[RecommendationRow]) -> str:
         "  ".join(
             [
                 row.id.ljust(widths["id"]),
+                row.recommender.ljust(widths["recommender"]),
                 row.symbol.ljust(widths["symbol"]),
                 row.name.ljust(widths["name"]),
                 row.recommend_date.ljust(widths["recommend_date"]),
@@ -172,6 +177,9 @@ def cmd_list(args: argparse.Namespace) -> int:
     if args.code:
         keyword = parse_symbol(args.code)
         rows = [row for row in rows if row.symbol.upper() == keyword.upper()]
+    if args.recommender:
+        recommender = normalize_recommender(args.recommender)
+        rows = [row for row in rows if row.recommender == recommender]
     print(render_table(rows))
     return 0
 
@@ -181,6 +189,7 @@ def cmd_add(args: argparse.Namespace) -> int:
     rows = read_rows(csv_path)
 
     symbol = parse_symbol(args.code)
+    recommender = normalize_recommender(args.recommender)
     recommend_date = parse_date(args.recommend_date)
     recommend_time = normalize_time(args.recommend_time)
     recommend_price = normalize_price(args.recommend_price)
@@ -189,6 +198,7 @@ def cmd_add(args: argparse.Namespace) -> int:
     rows.append(
         RecommendationRow(
             id=recommendation_id,
+            recommender=recommender,
             symbol=symbol,
             name=args.name.strip(),
             recommend_date=recommend_date,
@@ -227,11 +237,13 @@ def cmd_update(args: argparse.Namespace) -> int:
         raise ValueError("--recommend-price 和 --clear-recommend-price 不能同时使用")
 
     new_symbol = parse_symbol(args.code) if args.code else target.symbol
+    new_recommender = normalize_recommender(args.recommender) if args.recommender else target.recommender
     new_date = parse_date(args.recommend_date) if args.recommend_date else target.recommend_date
     new_time = "" if args.clear_recommend_time else normalize_time(args.recommend_time) if args.recommend_time else target.recommend_time
     new_price = "" if args.clear_recommend_price else normalize_price(args.recommend_price) if args.recommend_price else target.recommend_price
 
     target.symbol = new_symbol
+    target.recommender = new_recommender
     target.name = args.name.strip() if args.name is not None else target.name
     target.recommend_date = new_date
     target.recommend_time = new_time
@@ -266,6 +278,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     list_parser = subparsers.add_parser("list", help="List recommendation records")
     list_parser.add_argument("--code", "--symbol", dest="code", help="Only show one stock code")
+    list_parser.add_argument("--recommender", help="Only show one recommender")
     list_parser.set_defaults(func=cmd_list)
 
     add_parser = subparsers.add_parser("add", help="Add one recommendation record")
@@ -277,6 +290,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="A-share or HK code, e.g. 600519, 000001, 0700, 0005, 0700.HK",
     )
     add_parser.add_argument("--name", required=True, help="Stock name")
+    add_parser.add_argument("--recommender", default="默认", help="Recommender name")
     add_parser.add_argument("--recommend-date", required=True, help="Recommend date in YYYY-MM-DD")
     add_parser.add_argument("--recommend-time", help="Recommend time in HH:MM; script will try 1-minute quote price")
     add_parser.add_argument("--recommend-price", help="Manual recommend price; useful for historical minute quote fallback")
@@ -292,6 +306,7 @@ def build_parser() -> argparse.ArgumentParser:
     update_parser = subparsers.add_parser("update", help="Update one recommendation record by id")
     update_parser.add_argument("--id", required=True, help="Recommendation id")
     update_parser.add_argument("--code", "--symbol", dest="code", help="New A-share or HK stock code")
+    update_parser.add_argument("--recommender", help="New recommender name")
     update_parser.add_argument("--name", help="New stock name")
     update_parser.add_argument("--recommend-date", help="New date in YYYY-MM-DD")
     update_parser.add_argument("--recommend-time", help="New time in HH:MM")

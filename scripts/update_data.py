@@ -34,6 +34,7 @@ class PendingTrackingError(RuntimeError):
 @dataclass
 class Recommendation:
     id: str
+    recommender: str
     symbol: str
     query_symbol: str
     name: str
@@ -96,6 +97,10 @@ def generate_recommendation_id(symbol: str, recommend_date: str, row_number: int
   return f"{compact_date}-{compact_symbol}-{row_number}"
 
 
+def normalize_recommender(raw_recommender: str) -> str:
+  return raw_recommender.strip() or "默认"
+
+
 def parse_recommend_time(raw_time: str) -> dt.time | None:
   value = raw_time.strip()
   if not value:
@@ -135,6 +140,7 @@ def read_recommendations(csv_path: Path) -> tuple[list[Recommendation], list[dic
     reader = csv.DictReader(fh)
     for row_number, row in enumerate(reader, start=2):
       raw_id = (row.get("id") or "").strip()
+      recommender = normalize_recommender(row.get("recommender") or "")
       symbol = (row.get("symbol") or "").strip()
       name = (row.get("name") or "").strip()
       recommend_date = (row.get("recommend_date") or "").strip()
@@ -149,6 +155,7 @@ def read_recommendations(csv_path: Path) -> tuple[list[Recommendation], list[dic
         failures.append(
           {
             "id": raw_id or generate_recommendation_id(symbol, recommend_date, row_number),
+            "recommender": recommender,
             "symbol": "",
             "name": name,
             "recommend_date": recommend_date or "",
@@ -161,6 +168,7 @@ def read_recommendations(csv_path: Path) -> tuple[list[Recommendation], list[dic
         failures.append(
           {
             "id": raw_id or generate_recommendation_id(symbol, recommend_date, row_number),
+            "recommender": recommender,
             "symbol": symbol,
             "name": name,
             "recommend_date": "",
@@ -175,6 +183,7 @@ def read_recommendations(csv_path: Path) -> tuple[list[Recommendation], list[dic
         failures.append(
           {
             "id": raw_id or generate_recommendation_id(symbol, recommend_date, row_number),
+            "recommender": recommender,
             "symbol": symbol,
             "name": name,
             "recommend_date": recommend_date,
@@ -189,6 +198,7 @@ def read_recommendations(csv_path: Path) -> tuple[list[Recommendation], list[dic
         failures.append(
           {
             "id": raw_id or generate_recommendation_id(symbol, recommend_date, row_number),
+            "recommender": recommender,
             "symbol": symbol,
             "name": name,
             "recommend_date": recommend_date,
@@ -204,6 +214,7 @@ def read_recommendations(csv_path: Path) -> tuple[list[Recommendation], list[dic
         failures.append(
           {
             "id": raw_id or generate_recommendation_id(symbol, recommend_date, row_number),
+            "recommender": recommender,
             "symbol": symbol,
             "name": name,
             "recommend_date": recommend_date,
@@ -219,6 +230,7 @@ def read_recommendations(csv_path: Path) -> tuple[list[Recommendation], list[dic
         failures.append(
           {
             "id": raw_id or generate_recommendation_id(symbol, recommend_date, row_number),
+            "recommender": recommender,
             "symbol": symbol,
             "name": name,
             "recommend_date": recommend_date,
@@ -234,6 +246,7 @@ def read_recommendations(csv_path: Path) -> tuple[list[Recommendation], list[dic
         failures.append(
           {
             "id": raw_id or recommendation_id,
+            "recommender": recommender,
             "symbol": symbol,
             "name": name,
             "recommend_date": recommend_date,
@@ -246,6 +259,7 @@ def read_recommendations(csv_path: Path) -> tuple[list[Recommendation], list[dic
         failures.append(
           {
             "id": recommendation_id,
+            "recommender": recommender,
             "symbol": symbol,
             "name": name,
             "recommend_date": recommend_date,
@@ -258,6 +272,7 @@ def read_recommendations(csv_path: Path) -> tuple[list[Recommendation], list[dic
       recommendations.append(
         Recommendation(
           id=recommendation_id,
+          recommender=recommender,
           symbol=symbol,
           query_symbol=query_symbol,
           name=name,
@@ -500,6 +515,7 @@ def compute_record(rec: Recommendation, bars: list[dict], minute_bars: list[dict
 
   return {
     "id": rec.id,
+    "recommender": rec.recommender,
     "symbol": rec.symbol,
     "query_symbol": rec.query_symbol,
     "name": rec.name,
@@ -528,9 +544,9 @@ def compute_record(rec: Recommendation, bars: list[dict], minute_bars: list[dict
 
 
 def annotate_recommendation_sequences(records: list[dict]) -> list[dict]:
-  grouped: dict[str, list[dict]] = defaultdict(list)
+  grouped: dict[tuple[str, str], list[dict]] = defaultdict(list)
   for record in records:
-    grouped[record["symbol"]].append(record)
+    grouped[(record.get("recommender") or "默认", record["symbol"])].append(record)
 
   for symbol_records in grouped.values():
     symbol_records.sort(key=lambda item: (item["recommend_date"], item["id"]))
@@ -543,18 +559,19 @@ def annotate_recommendation_sequences(records: list[dict]) -> list[dict]:
 
 
 def build_stock_summaries(records: list[dict]) -> list[dict]:
-  grouped: dict[str, list[dict]] = defaultdict(list)
+  grouped: dict[tuple[str, str], list[dict]] = defaultdict(list)
   for record in records:
-    grouped[record["symbol"]].append(record)
+    grouped[(record.get("recommender") or "默认", record["symbol"])].append(record)
 
   summaries = []
-  for symbol, symbol_records in grouped.items():
+  for (recommender, symbol), symbol_records in grouped.items():
     symbol_records.sort(key=lambda item: (item["recommend_date"], item["id"]))
     profitable = sum(1 for item in symbol_records if item["is_profitable"])
 
     summaries.append(
       {
         "symbol": symbol,
+        "recommender": recommender,
         "name": symbol_records[-1]["name"],
         "recommendation_count": len(symbol_records),
         "profitable_count": profitable,
@@ -599,7 +616,8 @@ def refresh_context(now: dt.datetime) -> dict:
 def build_summary(records: list[dict]) -> dict:
   first_records_by_symbol: dict[str, dict] = {}
   for record in sorted(records, key=lambda item: (item["recommend_date"], item["id"])):
-    first_records_by_symbol.setdefault(record["symbol"], record)
+    summary_key = f"{record.get('recommender') or '默认'}|{record['symbol']}"
+    first_records_by_symbol.setdefault(summary_key, record)
 
   summary_records = list(first_records_by_symbol.values())
   total = len(records)
@@ -608,7 +626,7 @@ def build_summary(records: list[dict]) -> dict:
   return {
     "total_picks": total,
     "unique_symbols": len({record["symbol"] for record in records}),
-    "summary_basis": "first_recommendation",
+    "summary_basis": "first_recommendation_by_recommender_symbol",
     "summary_basis_count": len(summary_records),
     "profitable_picks": profitable,
     "win_rate": round(profitable / len(summary_records), 6) if summary_records else None,
@@ -669,6 +687,7 @@ def main() -> int:
       pending_records.append(
         {
           "id": rec.id,
+          "recommender": rec.recommender,
           "symbol": rec.symbol,
           "query_symbol": rec.query_symbol,
           "name": rec.name,
@@ -682,6 +701,7 @@ def main() -> int:
       failures.append(
         {
           "id": rec.id,
+          "recommender": rec.recommender,
           "symbol": rec.symbol,
           "query_symbol": rec.query_symbol,
           "name": rec.name,
