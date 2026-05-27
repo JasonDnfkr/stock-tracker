@@ -44,6 +44,7 @@
 - 搜索过滤
 - “待跟踪”与“失败记录”分流展示
 - 本地管理工具 `scripts/manage_recommendations.py`
+- 推荐时刻 `recommend_time` 与推荐价 `recommend_price`
 - `5日 / 10日 / 20日收益`
 - `最大涨幅 / 最大回撤`
 - A 股红涨绿跌配色
@@ -69,7 +70,7 @@
 - 股票列与推荐日期已合并，减少横向空间浪费
 - “当前价”和“收益率”已合并到同一列
 - `5日 / 10日 / 20日收益`、`最大涨幅`、`最大回撤` 都改成双行展示，第二行显示对应价格
-- 当天价格的顺延说明已压缩为 `MM-DD(顺延)`，避免撑宽布局
+- 推荐价列支持显示收盘价、1 分钟行情价、手工补录价及对应时间/来源
 - 顶部 hero 和底部录入说明已从页面上隐藏，但代码仍保留
 - 分组间的装饰色已去掉，避免花哨和干扰
 - 概览区新增散点图，且已并入 summary panel，不再单独占一个 panel
@@ -86,6 +87,8 @@
 - 录入层和抓价层已支持港股代码
 - 页面顶部现在会显示“最近更新时间 + 触发方式”
 - 散点图已支持 `近10日 / 近20日 / 近60日 / 全部` 时间范围切换，默认 `近20日`
+- 录入股票时支持填写 `recommend_time`，刷新时会尝试用 1 分钟行情计算推荐时刻股价
+- 历史记录支持填写 `recommend_price` 作为分钟行情无法回查时的手工兜底价
 
 ## 哪些方案被否决，以及为什么
 
@@ -461,9 +464,12 @@ tradeoff：
 - `formatNumber(value)`
 - `formatShortDate(dateText)`
 - `formatEntryDateLabel(entryDate, recommendDate)`
+- `entryPriceSourceLabel(source)`
+- `formatEntryPriceMeta(record)`
+- `entryPriceTitle(record)`
 - `renderMetricWithPrice(rate, price)`
 - `renderPriceWithMetric(price, rate)`
-- `renderEntryPrice(price, entryDate, recommendDate)`
+- `renderEntryPrice(record)`
 - `metricClass(value)`
 - `clamp(value, minValue, maxValue)`
 - `dateToTimestamp(dateText)`
@@ -554,7 +560,7 @@ tradeoff：
 
 关键字段：
 
-- `id,symbol,name,recommend_date,note`
+- `id,symbol,name,recommend_date,recommend_time,recommend_price,note`
 
 ### `docs/data/metrics.json`
 
@@ -570,6 +576,7 @@ tradeoff：
 - 读取 `recommendations.csv`
 - 规范化/校验 A 股与港股代码
 - 调用腾讯行情接口拉取 A 股 / 港股前复权日线
+- 推荐时间存在且没有手工价格时，尝试拉取 1 分钟行情
 - 计算收益相关指标
 - 输出 `metrics.json`
 - 对重复推荐的同一 `query_symbol` 做抓价缓存，避免重复请求
@@ -585,12 +592,15 @@ tradeoff：
 - `validate_symbol(raw_symbol: str) -> str`
 - `sanitize_id(raw_id: str) -> str`
 - `generate_recommendation_id(symbol: str, recommend_date: str, row_number: int) -> str`
+- `parse_recommend_time(raw_time: str) -> dt.time | None`
+- `parse_recommend_price(raw_price: str) -> float | None`
 - `read_recommendations(csv_path: Path) -> tuple[list[Recommendation], list[dict]]`
 - `tencent_symbol(symbol: str) -> tuple[str, str]`
+- `tencent_minute_history(symbol: str, target_date: dt.date, today: dt.date) -> list[dict]`
 - `tencent_history(symbol: str, start_date: dt.date, end_date: dt.date) -> list[dict]`
 - `first_index_on_or_after(bars: list[dict], target_date: dt.date) -> int | None`
 - `calculate_max_drawdown(closes: list[float]) -> tuple[float | None, float | None]`
-- `compute_record(rec: Recommendation, bars: list[dict]) -> dict`
+- `compute_record(rec: Recommendation, bars: list[dict], minute_bars: list[dict] | None = None) -> dict`
 - `annotate_recommendation_sequences(records: list[dict]) -> list[dict]`
 - `build_stock_summaries(records: list[dict]) -> list[dict]`
 - `average(values: list[float | None]) -> float | None`
@@ -608,7 +618,7 @@ tradeoff：
 
 关键数据结构：
 
-- `CSV_FIELDS = ["id", "symbol", "name", "recommend_date", "note"]`
+- `CSV_FIELDS = ["id", "symbol", "name", "recommend_date", "recommend_time", "recommend_price", "note"]`
 - `@dataclass class RecommendationRow`
 
 关键函数签名：
@@ -616,6 +626,8 @@ tradeoff：
 - `read_rows(csv_path: Path) -> list[RecommendationRow]`
 - `write_rows(csv_path: Path, rows: list[RecommendationRow]) -> None`
 - `parse_date(date_text: str) -> str`
+- `normalize_time(time_text: str | None) -> str`
+- `normalize_price(price_text: str | None) -> str`
 - `parse_symbol(symbol_text: str) -> str`
 - `generate_id(existing_rows: list[RecommendationRow], symbol: str, recommend_date: str) -> str`
 - `find_row(rows: list[RecommendationRow], recommendation_id: str) -> RecommendationRow`
@@ -631,9 +643,9 @@ tradeoff：
 CLI contract：
 
 - `list --code`
-- `add --code --name --recommend-date [--note] [--refresh]`
+- `add --code --name --recommend-date [--recommend-time] [--recommend-price] [--note] [--refresh]`
 - `remove --id [--refresh]`
-- `update --id [--code] [--name] [--recommend-date] [--note] [--new-id] [--regenerate-id] [--refresh]`
+- `update --id [--code] [--name] [--recommend-date] [--recommend-time] [--recommend-price] [--clear-recommend-time] [--clear-recommend-price] [--note] [--new-id] [--regenerate-id] [--refresh]`
 
 ## 最近修改了哪些文件
 
@@ -666,7 +678,7 @@ CLI contract：
 表头固定为：
 
 ```csv
-id,symbol,name,recommend_date,note
+id,symbol,name,recommend_date,recommend_time,recommend_price,note
 ```
 
 字段含义：
@@ -675,6 +687,8 @@ id,symbol,name,recommend_date,note
 - `symbol`：股票代码。CSV 里字段名仍然是 `symbol`
 - `name`：股票名称
 - `recommend_date`：推荐日期，要求 `YYYY-MM-DD`
+- `recommend_time`：可选，推荐时刻，要求 `HH:MM` 或 `HH:MM:SS`
+- `recommend_price`：可选，推荐时刻股价；填写后优先作为建仓价
 - `note`：备注
 
 输入约束：
@@ -684,6 +698,7 @@ id,symbol,name,recommend_date,note
 - `symbol` 可以写 A 股裸 6 位代码，也可以写 `.SH/.SS/.SZ`
 - `symbol` 也可以写港股裸代码或 `.HK`
 - 空行允许存在，会被忽略
+- 免费腾讯分钟接口不能保证任意历史日期回查；历史精确价格应使用 `recommend_price` 兜底
 
 ## `metrics.json` contract
 
@@ -730,8 +745,11 @@ id,symbol,name,recommend_date,note
 - `name: string`
 - `note: string`
 - `recommend_date: string`
+- `recommend_time: string | null`
 - `entry_date: string`
+- `entry_time: string | null`
 - `entry_price: number`
+- `entry_price_source: "manual" | "minute_1m" | "daily_close"`
 - `current_price: number`
 - `return_rate: number`
 - `return_5d: number | null`
@@ -752,6 +770,8 @@ id,symbol,name,recommend_date,note
 字段含义补充：
 
 - `entry_date`：实际建仓对应的交易日；若推荐日不是交易日，会顺延
+- `entry_time`：实际使用的分钟行情时间；手工价且填写了推荐时间时等于推荐时间
+- `entry_price_source`：`manual` 为手工价，`minute_1m` 为 1 分钟行情价，`daily_close` 为日收盘价
 - `query_symbol`：内部统一标准代码；A 股如 `600584.SS`，港股如 `0700.HK`
 - `recommendation_sequence`：该股票按时间排序后的第几次推荐
 - `recommendation_count_for_symbol`：该股票在全量事件中的推荐总次数
@@ -784,6 +804,7 @@ id,symbol,name,recommend_date,note
 - `query_symbol`
 - `name`
 - `recommend_date`
+- `recommend_time`
 - `status`
 - `message`
 
@@ -800,6 +821,7 @@ id,symbol,name,recommend_date,note
 - `query_symbol`（部分场景可能没有）
 - `name`
 - `recommend_date`
+- `recommend_time`
 - `error`
 
 ### `refresh_context`
@@ -874,7 +896,8 @@ python3 scripts/update_data.py
 
 ```bash
 python3 scripts/manage_recommendations.py list
-python3 scripts/manage_recommendations.py add --code 600519 --name 贵州茅台 --recommend-date 2026-05-25 --note 首次推荐 --refresh
+python3 scripts/manage_recommendations.py add --code 600519 --name 贵州茅台 --recommend-date 2026-05-25 --recommend-time 10:23 --note 首次推荐 --refresh
+python3 scripts/manage_recommendations.py update --id 20260525-600519-1 --recommend-time 10:23 --recommend-price 1288.5 --refresh
 ```
 
 本地预览静态页：

@@ -104,6 +104,38 @@ function formatEntryDateLabel(entryDate, recommendDate) {
   return shortDate;
 }
 
+function entryPriceSourceLabel(source) {
+  if (source === "manual") {
+    return "手填";
+  }
+  if (source === "daily_close") {
+    return "收盘";
+  }
+  return "";
+}
+
+function formatEntryPriceMeta(record) {
+  const entryDate = record.entry_date;
+  const recommendDate = record.recommend_date;
+  const entryTime = record.entry_time || record.recommend_time;
+  const sourceLabel = entryPriceSourceLabel(record.entry_price_source);
+
+  if (entryTime) {
+    return sourceLabel ? `${entryTime}(${sourceLabel})` : entryTime;
+  }
+
+  const dateLabel = formatEntryDateLabel(entryDate, recommendDate);
+  return sourceLabel ? `${dateLabel}${sourceLabel}` : dateLabel;
+}
+
+function entryPriceTitle(record) {
+  const dateText = record.entry_date || record.recommend_date || "";
+  const timeText = record.entry_time || record.recommend_time || "";
+  const sourceLabel = entryPriceSourceLabel(record.entry_price_source);
+  const parts = [dateText, timeText, sourceLabel].filter(Boolean);
+  return parts.length ? parts.join(" · ") : "";
+}
+
 function renderMetricWithPrice(rate, price) {
   const toneClass = metricClass(rate);
   return `
@@ -124,11 +156,11 @@ function renderPriceWithMetric(price, rate) {
   `;
 }
 
-function renderEntryPrice(price, entryDate, recommendDate) {
+function renderEntryPrice(record) {
   return `
     <div class="price-cell">
-      <span class="price-main">${formatNumber(price)}</span>
-      <span class="cell-note" title="${entryDate && recommendDate && entryDate !== recommendDate ? `顺延到 ${entryDate}` : entryDate || ""}">${formatEntryDateLabel(entryDate, recommendDate)}</span>
+      <span class="price-main">${formatNumber(record.entry_price)}</span>
+      <span class="cell-note" title="${escapeHtml(entryPriceTitle(record))}">${escapeHtml(formatEntryPriceMeta(record))}</span>
     </div>
   `;
 }
@@ -698,6 +730,10 @@ function renderTimelineChart(records) {
                   data-symbol="${escapeHtml(record.symbol)}"
                   data-name="${escapeHtml(record.name || "--")}"
                   data-recommend-date="${escapeHtml(formatTooltipDate(record.recommend_date))}"
+                  data-recommend-time="${escapeHtml(record.recommend_time || "")}"
+                  data-entry-price="${escapeHtml(formatNumber(record.entry_price))}"
+                  data-entry-time="${escapeHtml(record.entry_time || "")}"
+                  data-entry-price-source="${escapeHtml(entryPriceSourceLabel(record.entry_price_source))}"
                   data-return-rate="${escapeHtml(tooltipMetricText(record.return_rate))}"
                   data-return-rate-value="${record.return_rate}"
                   data-return-five-day="${escapeHtml(tooltipMetricText(record.return_5d))}"
@@ -826,6 +862,10 @@ function renderChartTooltip(target) {
     symbol = "--",
     name = "--",
     recommendDate = "--",
+    recommendTime = "",
+    entryPrice = "--",
+    entryTime = "",
+    entryPriceSource = "",
     returnRate = "--",
     returnFiveDay = "--",
     returnTenDay = "--",
@@ -848,7 +888,8 @@ function renderChartTooltip(target) {
 
   chartTooltip.innerHTML = `
     <div class="chart-tooltip-title">${escapeHtml(symbol)} ${escapeHtml(name)}</div>
-    <div class="chart-tooltip-row"><span>推荐日期</span><strong>${escapeHtml(recommendDate)}</strong></div>
+    <div class="chart-tooltip-row"><span>推荐时间</span><strong>${escapeHtml([recommendDate, recommendTime].filter(Boolean).join(" ") || "--")}</strong></div>
+    <div class="chart-tooltip-row"><span>推荐价</span><strong>${escapeHtml(entryPrice)}${entryTime || recommendTime || entryPriceSource ? ` (${escapeHtml([entryTime || recommendTime, entryPriceSource].filter(Boolean).join(" · "))})` : ""}</strong></div>
     <div class="chart-tooltip-row"><span>当前收益</span><strong class="${tooltipMetricClass(parsedReturnRate)}">${escapeHtml(returnRate)}</strong></div>
     <div class="chart-tooltip-row"><span>5日收益</span><strong class="${tooltipMetricClass(parsedReturn5d)}">${escapeHtml(returnFiveDay)}</strong></div>
     <div class="chart-tooltip-row"><span>10日收益</span><strong class="${tooltipMetricClass(parsedReturn10d)}">${escapeHtml(returnTenDay)}</strong></div>
@@ -1000,7 +1041,7 @@ function renderGroupedView(records) {
                 }
               </td>
               <td>
-                ${renderEntryPrice(record.entry_price, record.entry_date, record.recommend_date)}
+                ${renderEntryPrice(record)}
               </td>
               <td>${renderPriceWithMetric(record.current_price, record.return_rate)}</td>
               <td>${renderMetricWithPrice(record.return_5d, record.return_5d_price)}</td>
@@ -1050,7 +1091,7 @@ function renderTable(records) {
             </div>
           </td>
           <td>
-            ${renderEntryPrice(record.entry_price, record.entry_date, record.recommend_date)}
+            ${renderEntryPrice(record)}
           </td>
           <td>${renderPriceWithMetric(record.current_price, record.return_rate)}</td>
           <td>${renderMetricWithPrice(record.return_5d, record.return_5d_price)}</td>
@@ -1107,7 +1148,7 @@ function renderFailures(failures) {
         <article class="failure-item">
           <p class="failure-title">${title}</p>
           <p class="failure-detail">事件 ID：${failure.id || "--"}</p>
-          <p class="failure-detail">推荐日期：${failure.recommend_date}</p>
+          <p class="failure-detail">推荐时间：${[failure.recommend_date, failure.recommend_time].filter(Boolean).join(" ") || "--"}</p>
           <p class="failure-detail">失败原因：${failure.error}</p>
         </article>
       `;
@@ -1133,7 +1174,7 @@ function renderPendingRecords(records) {
         <article class="pending-item">
           <p class="failure-title">${title}</p>
           <p class="failure-detail">事件 ID：${record.id || "--"}</p>
-          <p class="failure-detail">推荐日期：${record.recommend_date}</p>
+          <p class="failure-detail">推荐时间：${[record.recommend_date, record.recommend_time].filter(Boolean).join(" ") || "--"}</p>
           <p class="failure-detail">当前状态：${record.message}</p>
         </article>
       `;

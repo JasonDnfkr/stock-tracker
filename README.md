@@ -21,15 +21,18 @@
 最省事的录入方式不是手改 CSV，而是用本地命令行工具：
 
 ```bash
-python3 scripts/manage_recommendations.py add --code 600519 --name 贵州茅台 --recommend-date 2026-05-25 --note 首次推荐 --refresh
+python3 scripts/manage_recommendations.py add --code 600519 --name 贵州茅台 --recommend-date 2026-05-25 --recommend-time 10:23 --note 首次推荐 --refresh
+python3 scripts/manage_recommendations.py add --code 600519 --name 贵州茅台 --recommend-date 2026-05-25 --recommend-time 10:23 --recommend-price 1288.5 --note 历史补录 --refresh
 python3 scripts/manage_recommendations.py list
-python3 scripts/manage_recommendations.py update --id 20260525-600519-1 --note 二次观察 --refresh
+python3 scripts/manage_recommendations.py update --id 20260525-600519-1 --recommend-time 10:23 --recommend-price 1288.5 --note 二次观察 --refresh
 python3 scripts/manage_recommendations.py remove --id 20260525-600519-1 --refresh
 ```
 
 说明：
 
 - `--code` 是主要参数名，支持 A 股和港股代码
+- `--recommend-time` 可选，格式是 `HH:MM`，系统会尝试使用 1 分钟行情作为推荐价
+- `--recommend-price` 可选，用于历史补录或分钟行情不可回查时手工指定推荐价
 - `--refresh` 会顺手执行一次 `scripts/update_data.py`
 - 工具会自动生成 `id`，你不需要手工维护
 
@@ -38,10 +41,10 @@ python3 scripts/manage_recommendations.py remove --id 20260525-600519-1 --refres
 推荐记录存放在 `docs/data/recommendations.csv`，字段如下：
 
 ```csv
-id,symbol,name,recommend_date,note
-20260506-301666-1,301666,大普微,2026-05-06,empty
-20260521-688820-1,688820,盛合晶微,2026-05-21,empty
-20260525-603986-1,603986,兆易创新,2026-05-24,二次推荐
+id,symbol,name,recommend_date,recommend_time,recommend_price,note
+20260506-301666-1,301666,大普微,2026-05-06,,,empty
+20260521-688820-1,688820,盛合晶微,2026-05-21,10:23,,empty
+20260525-603986-1,603986,兆易创新,2026-05-24,10:23,1288.5,二次推荐
 ```
 
 字段说明：
@@ -50,6 +53,8 @@ id,symbol,name,recommend_date,note
 - `symbol`：股票代码列名目前仍保留为 `symbol`
 - `name`：股票名称
 - `recommend_date`：你记录的推荐日期，格式必须是 `YYYY-MM-DD`
+- `recommend_time`：可选，推荐时刻，格式为 `HH:MM`
+- `recommend_price`：可选，推荐时刻股价；填写后优先使用该价格，不再依赖分钟行情回查
 - `note`：可选备注
 
 补充规则：
@@ -69,6 +74,7 @@ id,symbol,name,recommend_date,note
 当前核心指标：
 
 - 推荐日建仓价
+- 推荐时刻股价与价格来源
 - 当前价与当前收益率
 - 5 日收益
 - 10 日收益
@@ -83,7 +89,8 @@ id,symbol,name,recommend_date,note
 - 展开后，后续推荐会显示在同组内
 - 多次推荐的股票，在展开状态下才会显示“第 N 次推荐”
 - 5 日、10 日、20 日、最大涨幅、最大回撤都会额外显示对应价格
-- 如果推荐日不是交易日，当天价格会显示成 `MM-DD(顺延)`
+- 如果没有填写推荐时间，推荐价沿用推荐日收盘价；如果推荐日不是交易日，会显示成 `MM-DD(顺延)收盘`
+- 如果填写了推荐时间，推荐价会优先使用 1 分钟行情；无法回查历史分钟行情时，可填写 `recommend_price` 手工兜底
 
 ## 异常和兜底
 
@@ -157,7 +164,7 @@ python3 -m http.server 8000 --directory docs
 
 ## 指标口径
 
-- 当天价格：推荐日当天收盘价；若当天不是交易日，则顺延到下一个交易日
+- 推荐价：优先使用手工 `recommend_price`；否则若有 `recommend_time`，使用推荐时刻之后第一条 1 分钟行情价格；否则使用推荐日当天收盘价，若当天不是交易日则顺延到下一个交易日
 - 当前价：最新一个可用交易日收盘价
 - 收益率：`当前价 / 建仓价 - 1`
 - 5 日 / 10 日 / 20 日收益：推荐后第 5 / 10 / 20 个交易日相对建仓价的收益

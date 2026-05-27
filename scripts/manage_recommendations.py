@@ -10,10 +10,10 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from update_data import normalize_symbol, sanitize_id, validate_symbol
+from update_data import normalize_symbol, parse_recommend_price, parse_recommend_time, sanitize_id, validate_symbol
 
 
-CSV_FIELDS = ["id", "symbol", "name", "recommend_date", "note"]
+CSV_FIELDS = ["id", "symbol", "name", "recommend_date", "recommend_time", "recommend_price", "note"]
 DEFAULT_CSV_PATH = Path("docs/data/recommendations.csv")
 DEFAULT_METRICS_SCRIPT = Path("scripts/update_data.py")
 
@@ -24,6 +24,8 @@ class RecommendationRow:
     symbol: str
     name: str
     recommend_date: str
+    recommend_time: str
+    recommend_price: str
     note: str
 
 
@@ -39,6 +41,8 @@ def read_rows(csv_path: Path) -> list[RecommendationRow]:
                 symbol=(row.get("symbol") or "").strip(),
                 name=(row.get("name") or "").strip(),
                 recommend_date=(row.get("recommend_date") or "").strip(),
+                recommend_time=(row.get("recommend_time") or "").strip(),
+                recommend_price=(row.get("recommend_price") or "").strip(),
                 note=(row.get("note") or "").strip(),
             )
             for row in reader
@@ -60,6 +64,8 @@ def write_rows(csv_path: Path, rows: list[RecommendationRow]) -> None:
                     "symbol": row.symbol,
                     "name": row.name,
                     "recommend_date": row.recommend_date,
+                    "recommend_time": row.recommend_time,
+                    "recommend_price": row.recommend_price,
                     "note": row.note,
                 }
             )
@@ -70,6 +76,20 @@ def parse_date(date_text: str) -> str:
         return dt.date.fromisoformat(date_text).isoformat()
     except ValueError as exc:
         raise ValueError("recommend_date 必须是 YYYY-MM-DD") from exc
+
+
+def normalize_time(time_text: str | None) -> str:
+    if not time_text:
+        return ""
+    parsed = parse_recommend_time(time_text)
+    return parsed.strftime("%H:%M") if parsed else ""
+
+
+def normalize_price(price_text: str | None) -> str:
+    if not price_text:
+        return ""
+    parsed = parse_recommend_price(price_text)
+    return f"{parsed:g}" if parsed is not None else ""
 
 
 def parse_symbol(symbol_text: str) -> str:
@@ -116,6 +136,8 @@ def render_table(rows: list[RecommendationRow]) -> str:
         "symbol": max(len("symbol"), *(len(row.symbol) for row in rows)),
         "name": max(len("name"), *(len(row.name) for row in rows)),
         "recommend_date": len("recommend_date"),
+        "recommend_time": len("recommend_time"),
+        "recommend_price": len("recommend_price"),
         "note": max(len("note"), *(len(row.note) for row in rows)),
     }
 
@@ -128,6 +150,8 @@ def render_table(rows: list[RecommendationRow]) -> str:
                 row.symbol.ljust(widths["symbol"]),
                 row.name.ljust(widths["name"]),
                 row.recommend_date.ljust(widths["recommend_date"]),
+                row.recommend_time.ljust(widths["recommend_time"]),
+                row.recommend_price.ljust(widths["recommend_price"]),
                 row.note.ljust(widths["note"]),
             ]
         )
@@ -158,6 +182,8 @@ def cmd_add(args: argparse.Namespace) -> int:
 
     symbol = parse_symbol(args.code)
     recommend_date = parse_date(args.recommend_date)
+    recommend_time = normalize_time(args.recommend_time)
+    recommend_price = normalize_price(args.recommend_price)
     recommendation_id = generate_id(rows, symbol, recommend_date)
 
     rows.append(
@@ -166,6 +192,8 @@ def cmd_add(args: argparse.Namespace) -> int:
             symbol=symbol,
             name=args.name.strip(),
             recommend_date=recommend_date,
+            recommend_time=recommend_time,
+            recommend_price=recommend_price,
             note=(args.note or "").strip(),
         )
     )
@@ -193,12 +221,21 @@ def cmd_update(args: argparse.Namespace) -> int:
     rows = read_rows(csv_path)
     target = find_row(rows, args.id.strip())
 
+    if args.clear_recommend_time and args.recommend_time:
+        raise ValueError("--recommend-time 和 --clear-recommend-time 不能同时使用")
+    if args.clear_recommend_price and args.recommend_price:
+        raise ValueError("--recommend-price 和 --clear-recommend-price 不能同时使用")
+
     new_symbol = parse_symbol(args.code) if args.code else target.symbol
     new_date = parse_date(args.recommend_date) if args.recommend_date else target.recommend_date
+    new_time = "" if args.clear_recommend_time else normalize_time(args.recommend_time) if args.recommend_time else target.recommend_time
+    new_price = "" if args.clear_recommend_price else normalize_price(args.recommend_price) if args.recommend_price else target.recommend_price
 
     target.symbol = new_symbol
     target.name = args.name.strip() if args.name is not None else target.name
     target.recommend_date = new_date
+    target.recommend_time = new_time
+    target.recommend_price = new_price
     target.note = args.note.strip() if args.note is not None else target.note
 
     if args.regenerate_id:
@@ -241,6 +278,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     add_parser.add_argument("--name", required=True, help="Stock name")
     add_parser.add_argument("--recommend-date", required=True, help="Recommend date in YYYY-MM-DD")
+    add_parser.add_argument("--recommend-time", help="Recommend time in HH:MM; script will try 1-minute quote price")
+    add_parser.add_argument("--recommend-price", help="Manual recommend price; useful for historical minute quote fallback")
     add_parser.add_argument("--note", default="", help="Optional note")
     add_parser.add_argument("--refresh", action="store_true", help="Run scripts/update_data.py after writing CSV")
     add_parser.set_defaults(func=cmd_add)
@@ -255,6 +294,10 @@ def build_parser() -> argparse.ArgumentParser:
     update_parser.add_argument("--code", "--symbol", dest="code", help="New A-share or HK stock code")
     update_parser.add_argument("--name", help="New stock name")
     update_parser.add_argument("--recommend-date", help="New date in YYYY-MM-DD")
+    update_parser.add_argument("--recommend-time", help="New time in HH:MM")
+    update_parser.add_argument("--recommend-price", help="New manual recommend price")
+    update_parser.add_argument("--clear-recommend-time", action="store_true", help="Clear recommend_time")
+    update_parser.add_argument("--clear-recommend-price", action="store_true", help="Clear recommend_price")
     update_parser.add_argument("--note", help="New note")
     update_parser.add_argument("--new-id", help="Set a custom id explicitly")
     update_parser.add_argument(

@@ -23,6 +23,8 @@ from zoneinfo import ZoneInfo
 
 TENCENT_A_CHART_URL = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={symbol},day,,,{count},qfq"
 TENCENT_HK_CHART_URL = "https://web.ifzq.gtimg.cn/appstock/app/hkfqkline/get?param={symbol},day,,,{count},qfq"
+TENCENT_MINUTE_KLINE_URL = "https://ifzq.gtimg.cn/appstock/app/kline/mkline?param={symbol},m1,,{count}"
+TENCENT_MINUTE_QUERY_URL = "https://web.ifzq.gtimg.cn/appstock/app/minute/query?code={symbol}"
 
 
 class PendingTrackingError(RuntimeError):
@@ -36,6 +38,8 @@ class Recommendation:
     query_symbol: str
     name: str
     recommend_date: dt.date
+    recommend_time: dt.time | None
+    recommend_price: float | None
     note: str
 
 
@@ -92,6 +96,36 @@ def generate_recommendation_id(symbol: str, recommend_date: str, row_number: int
   return f"{compact_date}-{compact_symbol}-{row_number}"
 
 
+def parse_recommend_time(raw_time: str) -> dt.time | None:
+  value = raw_time.strip()
+  if not value:
+    return None
+
+  for fmt in ("%H:%M", "%H:%M:%S"):
+    try:
+      parsed = dt.datetime.strptime(value, fmt).time()
+      return parsed.replace(second=0, microsecond=0)
+    except ValueError:
+      pass
+
+  raise ValueError("recommend_time 必须是 HH:MM 或 HH:MM:SS")
+
+
+def parse_recommend_price(raw_price: str) -> float | None:
+  value = raw_price.strip()
+  if not value:
+    return None
+
+  try:
+    price = float(value)
+  except ValueError as exc:
+    raise ValueError("recommend_price 必须是数字") from exc
+
+  if price <= 0:
+    raise ValueError("recommend_price 必须大于 0")
+  return price
+
+
 def read_recommendations(csv_path: Path) -> tuple[list[Recommendation], list[dict]]:
   recommendations: list[Recommendation] = []
   failures: list[dict] = []
@@ -104,9 +138,11 @@ def read_recommendations(csv_path: Path) -> tuple[list[Recommendation], list[dic
       symbol = (row.get("symbol") or "").strip()
       name = (row.get("name") or "").strip()
       recommend_date = (row.get("recommend_date") or "").strip()
+      raw_recommend_time = (row.get("recommend_time") or "").strip()
+      raw_recommend_price = (row.get("recommend_price") or "").strip()
       note = (row.get("note") or "").strip()
 
-      if not any([raw_id, symbol, name, recommend_date, note]):
+      if not any([raw_id, symbol, name, recommend_date, raw_recommend_time, raw_recommend_price, note]):
         continue
 
       if not symbol:
@@ -143,6 +179,36 @@ def read_recommendations(csv_path: Path) -> tuple[list[Recommendation], list[dic
             "name": name,
             "recommend_date": recommend_date,
             "error": f"CSV 第 {row_number} 行日期格式错误，要求 YYYY-MM-DD",
+          }
+        )
+        continue
+
+      try:
+        parsed_time = parse_recommend_time(raw_recommend_time)
+      except ValueError as exc:
+        failures.append(
+          {
+            "id": raw_id or generate_recommendation_id(symbol, recommend_date, row_number),
+            "symbol": symbol,
+            "name": name,
+            "recommend_date": recommend_date,
+            "recommend_time": raw_recommend_time,
+            "error": f"CSV 第 {row_number} 行推荐时间格式错误：{exc}",
+          }
+        )
+        continue
+
+      try:
+        parsed_price = parse_recommend_price(raw_recommend_price)
+      except ValueError as exc:
+        failures.append(
+          {
+            "id": raw_id or generate_recommendation_id(symbol, recommend_date, row_number),
+            "symbol": symbol,
+            "name": name,
+            "recommend_date": recommend_date,
+            "recommend_time": raw_recommend_time,
+            "error": f"CSV 第 {row_number} 行推荐价格格式错误：{exc}",
           }
         )
         continue
@@ -196,6 +262,8 @@ def read_recommendations(csv_path: Path) -> tuple[list[Recommendation], list[dic
           query_symbol=query_symbol,
           name=name,
           recommend_date=parsed_date,
+          recommend_time=parsed_time,
+          recommend_price=parsed_price,
           note=note,
         )
       )
@@ -211,6 +279,100 @@ def tencent_symbol(symbol: str) -> tuple[str, str]:
   if symbol.endswith(".HK"):
     return "hk", f"hk{symbol[:-3].zfill(5)}"
   raise ValueError(f"Unsupported market symbol: {symbol}")
+
+
+def parse_minute_rows(raw_rows: list, target_date: dt.date | None) -> list[dict]:
+  bars = []
+  for raw_bar in raw_rows:
+    if isinstance(raw_bar, list):
+      if len(raw_bar) < 3:
+        continue
+      timestamp = str(raw_bar[0])
+      if not re.fullmatch(r"\d{12}", timestamp):
+        continue
+      bar_date = dt.date.fromisoformat(f"{timestamp[:4]}-{timestamp[4:6]}-{timestamp[6:8]}")
+      bar_time = dt.time(int(timestamp[8:10]), int(timestamp[10:12]))
+      close = raw_bar[2]
+    elif isinstance(raw_bar, str):
+      parts = raw_bar.split()
+      if len(parts) < 2 or target_date is None:
+        continue
+      time_text = parts[0]
+      if not re.fullmatch(r"\d{4}", time_text):
+        continue
+      bar_date = target_date
+      bar_time = dt.time(int(time_text[:2]), int(time_text[2:4]))
+      close = parts[1]
+    else:
+      continue
+
+    if close in (None, ""):
+      continue
+
+    bars.append(
+      {
+        "date": bar_date,
+        "time": bar_time,
+        "price": float(close),
+      }
+    )
+
+  return bars
+
+
+def tencent_minute_history(symbol: str, target_date: dt.date, today: dt.date) -> list[dict]:
+  market, provider_symbol = tencent_symbol(symbol)
+
+  if market == "a":
+    # This unofficial endpoint returns recent 1-minute bars, but does not reliably
+    # honor arbitrary historical date parameters.
+    request = urllib.request.Request(
+      TENCENT_MINUTE_KLINE_URL.format(symbol=provider_symbol, count=800),
+      headers={
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json",
+      },
+    )
+    with urllib.request.urlopen(request, timeout=20) as response:
+      payload = json.loads(response.read().decode("utf-8"))
+
+    if payload.get("code") not in (0, "0"):
+      raise RuntimeError(payload.get("msg") or "Tencent minute API error")
+
+    result_item = (payload.get("data") or {}).get(provider_symbol)
+    raw_rows = (result_item or {}).get("m1") or []
+    return parse_minute_rows(raw_rows, None)
+
+  if target_date != today:
+    raise RuntimeError("腾讯港股分钟接口仅稳定返回当日分时，历史港股推荐价请填写 recommend_price")
+
+  request = urllib.request.Request(
+    TENCENT_MINUTE_QUERY_URL.format(symbol=provider_symbol),
+    headers={
+      "User-Agent": "Mozilla/5.0",
+      "Accept": "application/json",
+    },
+  )
+  with urllib.request.urlopen(request, timeout=20) as response:
+    payload = json.loads(response.read().decode("utf-8"))
+
+  if payload.get("code") not in (0, "0"):
+    raise RuntimeError(payload.get("msg") or "Tencent minute API error")
+
+  result_item = (payload.get("data") or {}).get(provider_symbol)
+  raw_rows = (((result_item or {}).get("data") or {}).get("data")) or []
+  return parse_minute_rows(raw_rows, target_date)
+
+
+def first_minute_on_or_after(minute_bars: list[dict], target_date: dt.date, target_time: dt.time) -> dict | None:
+  same_day_bars = sorted(
+    (bar for bar in minute_bars if bar["date"] == target_date),
+    key=lambda item: item["time"],
+  )
+  for bar in same_day_bars:
+    if bar["time"] >= target_time:
+      return bar
+  return None
 
 
 def tencent_history(symbol: str, start_date: dt.date, end_date: dt.date) -> list[dict]:
@@ -291,13 +453,30 @@ def calculate_max_drawdown(closes: list[float]) -> tuple[float | None, float | N
   return max_drawdown, trough_price
 
 
-def compute_record(rec: Recommendation, bars: list[dict]) -> dict:
+def resolve_entry_price(rec: Recommendation, entry_bar: dict, minute_bars: list[dict] | None) -> tuple[float, str | None, str]:
+  if rec.recommend_price is not None:
+    return rec.recommend_price, rec.recommend_time.strftime("%H:%M") if rec.recommend_time else None, "manual"
+
+  if rec.recommend_time is not None:
+    if minute_bars is None:
+      raise RuntimeError("缺少分钟行情，无法计算推荐时刻股价")
+
+    minute_bar = first_minute_on_or_after(minute_bars, rec.recommend_date, rec.recommend_time)
+    if minute_bar is None:
+      raise RuntimeError("推荐时间之后暂无可用 1 分钟行情；历史记录可手工填写 recommend_price 兜底")
+
+    return float(minute_bar["price"]), minute_bar["time"].strftime("%H:%M"), "minute_1m"
+
+  return float(entry_bar["close"]), None, "daily_close"
+
+
+def compute_record(rec: Recommendation, bars: list[dict], minute_bars: list[dict] | None = None) -> dict:
   entry_index = first_index_on_or_after(bars, rec.recommend_date)
   if entry_index is None:
     raise PendingTrackingError("推荐日期之后暂无可用交易数据，等待下一个交易日")
 
   entry_bar = bars[entry_index]
-  entry_price = float(entry_bar["close"])
+  entry_price, entry_time, entry_price_source = resolve_entry_price(rec, entry_bar, minute_bars)
   current_bar = bars[-1]
   current_price = float(current_bar["close"])
 
@@ -326,8 +505,11 @@ def compute_record(rec: Recommendation, bars: list[dict]) -> dict:
     "name": rec.name,
     "note": rec.note,
     "recommend_date": rec.recommend_date.isoformat(),
+    "recommend_time": rec.recommend_time.strftime("%H:%M") if rec.recommend_time else None,
     "entry_date": entry_bar["date"].isoformat(),
+    "entry_time": entry_time,
     "entry_price": round(entry_price, 4),
+    "entry_price_source": entry_price_source,
     "current_price": round(current_price, 4),
     "return_rate": round(return_rate, 6),
     "return_5d": round(return_5d, 6) if return_5d is not None else None,
@@ -460,6 +642,7 @@ def main() -> int:
   today = dt.date.today()
   pending_records = []
   bars_cache: dict[str, list[dict]] = {}
+  minute_bars_cache: dict[tuple[str, dt.date], list[dict]] = {}
 
   for rec in recommendations:
     try:
@@ -471,7 +654,17 @@ def main() -> int:
         time.sleep(0.2)
       if not bars:
         raise RuntimeError("No market data returned")
-      records.append(compute_record(rec, bars))
+
+      minute_bars = None
+      if rec.recommend_time is not None and rec.recommend_price is None:
+        minute_cache_key = (rec.query_symbol, rec.recommend_date)
+        minute_bars = minute_bars_cache.get(minute_cache_key)
+        if minute_bars is None:
+          minute_bars = tencent_minute_history(rec.query_symbol, rec.recommend_date, today)
+          minute_bars_cache[minute_cache_key] = minute_bars
+          time.sleep(0.2)
+
+      records.append(compute_record(rec, bars, minute_bars))
     except PendingTrackingError as exc:
       pending_records.append(
         {
@@ -480,6 +673,7 @@ def main() -> int:
           "query_symbol": rec.query_symbol,
           "name": rec.name,
           "recommend_date": rec.recommend_date.isoformat(),
+          "recommend_time": rec.recommend_time.strftime("%H:%M") if rec.recommend_time else None,
           "status": "pending_tracking",
           "message": str(exc),
         }
@@ -492,6 +686,7 @@ def main() -> int:
           "query_symbol": rec.query_symbol,
           "name": rec.name,
           "recommend_date": rec.recommend_date.isoformat(),
+          "recommend_time": rec.recommend_time.strftime("%H:%M") if rec.recommend_time else None,
           "error": str(exc),
         }
       )
