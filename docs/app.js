@@ -173,6 +173,21 @@ function renderPriceWithMetric(price, rate, source = "") {
   `;
 }
 
+function renderCurrentOrTakeProfitPrice(record) {
+  const toneClass = metricClass(record.return_rate);
+  if (record.current_price_source !== "take_profit") {
+    return renderPriceWithMetric(record.current_price, record.return_rate, record.current_price_source);
+  }
+
+  return `
+    <div class="price-cell">
+      <span class="price-main ${toneClass}">${formatNumber(record.current_price)}</span>
+      <span class="cell-note ${toneClass}">${formatSignedPercent(record.return_rate)} · 止盈</span>
+      <span class="cell-note market-price-note">当前 ${formatNumber(record.market_current_price)}</span>
+    </div>
+  `;
+}
+
 function renderEntryPrice(record) {
   return `
     <div class="price-cell">
@@ -1172,7 +1187,7 @@ function renderGroupedView(records) {
               <td>
                 ${renderEntryPrice(record)}
               </td>
-              <td>${renderPriceWithMetric(record.current_price, record.return_rate, record.current_price_source)}</td>
+              <td>${renderCurrentOrTakeProfitPrice(record)}</td>
               <td>${renderMetricWithPrice(record.return_5d, record.return_5d_price, record.return_5d_price_source)}</td>
               <td>${renderMetricWithPrice(record.return_10d, record.return_10d_price, record.return_10d_price_source)}</td>
               <td>${renderMetricWithPrice(record.return_20d, record.return_20d_price, record.return_20d_price_source)}</td>
@@ -1224,7 +1239,7 @@ function renderTable(records) {
           <td>
             ${renderEntryPrice(record)}
           </td>
-          <td>${renderPriceWithMetric(record.current_price, record.return_rate, record.current_price_source)}</td>
+          <td>${renderCurrentOrTakeProfitPrice(record)}</td>
           <td>${renderMetricWithPrice(record.return_5d, record.return_5d_price, record.return_5d_price_source)}</td>
           <td>${renderMetricWithPrice(record.return_10d, record.return_10d_price, record.return_10d_price_source)}</td>
           <td>${renderMetricWithPrice(record.return_20d, record.return_20d_price, record.return_20d_price_source)}</td>

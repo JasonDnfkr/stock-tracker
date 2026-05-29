@@ -153,7 +153,7 @@ docs/data/recommendations.csv
   - `return_5d_price_source` / `return_10d_price_source` / `return_20d_price_source`
 - `docs/app.js`
   - 表格止盈徽标
-  - 当前/止盈价列
+  - 当前/止盈价列；止盈后仍要展示真实当前价用于对比
   - tooltip 止盈点信息
 - `README.md`
 - `PROJECT_CONTEXT.md`

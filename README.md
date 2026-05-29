@@ -109,7 +109,7 @@ id,tag,symbol,name,recommend_date,recommend_time,recommend_price,take_profit_dat
 - 如果没有填写推荐时间，推荐价沿用推荐日收盘价；如果推荐日不是交易日，会显示成 `MM-DD(顺延)收盘`
 - 如果填写了推荐时间，推荐价会优先使用 1 分钟行情，页面只显示时间，例如 `09:32`
 - 如果填写了 `recommend_price`，页面会显示 `09:32(手填)`；如果走日线收盘价，页面会显示 `MM-DD收盘`
-- 如果填写了止盈点，页面会显示止盈标记；止盈价可以手填，也可以由 `take_profit_date + take_profit_time` 自动抓取。当前收益、summary、散点图以及止盈之后的 5/10/20 日收益都按止盈价计算
+- 如果填写了止盈点，页面会显示止盈标记；止盈价可以手填，也可以由 `take_profit_date + take_profit_time` 自动抓取。当前收益、summary、散点图以及止盈之后的 5/10/20 日收益都按止盈价计算，同时表格会弱化展示真实当前价用于对比
 
 ## 异常和兜底
 

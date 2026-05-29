@@ -717,6 +717,10 @@ th {
   font-size: 0.82rem;
 }
 
+.market-price-note {
+  color: var(--muted);
+}
+
 .pill {
   display: inline-flex;
   align-items: center;
