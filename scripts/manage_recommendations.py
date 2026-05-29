@@ -15,7 +15,19 @@ from pathlib import Path
 from update_data import normalize_symbol, normalize_tag, parse_recommend_price, parse_recommend_time, sanitize_id, validate_symbol
 
 
-CSV_FIELDS = ["id", "tag", "symbol", "name", "recommend_date", "recommend_time", "recommend_price", "note"]
+CSV_FIELDS = [
+    "id",
+    "tag",
+    "symbol",
+    "name",
+    "recommend_date",
+    "recommend_time",
+    "recommend_price",
+    "take_profit_date",
+    "take_profit_time",
+    "take_profit_price",
+    "note",
+]
 DEFAULT_CSV_PATH = Path("docs/data/recommendations.csv")
 DEFAULT_METRICS_SCRIPT = Path("scripts/update_data.py")
 WEEKDAY_NAMES = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
@@ -30,6 +42,9 @@ class RecommendationRow:
     recommend_date: str
     recommend_time: str
     recommend_price: str
+    take_profit_date: str
+    take_profit_time: str
+    take_profit_price: str
     note: str
 
 
@@ -48,6 +63,9 @@ def read_rows(csv_path: Path) -> list[RecommendationRow]:
                 recommend_date=(row.get("recommend_date") or "").strip(),
                 recommend_time=(row.get("recommend_time") or "").strip(),
                 recommend_price=(row.get("recommend_price") or "").strip(),
+                take_profit_date=(row.get("take_profit_date") or "").strip(),
+                take_profit_time=(row.get("take_profit_time") or "").strip(),
+                take_profit_price=(row.get("take_profit_price") or "").strip(),
                 note=(row.get("note") or "").strip(),
             )
             for row in reader
@@ -72,6 +90,9 @@ def write_rows(csv_path: Path, rows: list[RecommendationRow]) -> None:
                     "recommend_date": row.recommend_date,
                     "recommend_time": row.recommend_time,
                     "recommend_price": row.recommend_price,
+                    "take_profit_date": row.take_profit_date,
+                    "take_profit_time": row.take_profit_time,
+                    "take_profit_price": row.take_profit_price,
                     "note": row.note,
                 }
             )
@@ -145,6 +166,9 @@ def render_table(rows: list[RecommendationRow]) -> str:
         "recommend_date": len("recommend_date"),
         "recommend_time": len("recommend_time"),
         "recommend_price": len("recommend_price"),
+        "take_profit_date": len("take_profit_date"),
+        "take_profit_time": len("take_profit_time"),
+        "take_profit_price": len("take_profit_price"),
         "note": max(len("note"), *(len(row.note) for row in rows)),
     }
 
@@ -160,6 +184,9 @@ def render_table(rows: list[RecommendationRow]) -> str:
                 row.recommend_date.ljust(widths["recommend_date"]),
                 row.recommend_time.ljust(widths["recommend_time"]),
                 row.recommend_price.ljust(widths["recommend_price"]),
+                row.take_profit_date.ljust(widths["take_profit_date"]),
+                row.take_profit_time.ljust(widths["take_profit_time"]),
+                row.take_profit_price.ljust(widths["take_profit_price"]),
                 row.note.ljust(widths["note"]),
             ]
         )
@@ -196,6 +223,17 @@ def cmd_add(args: argparse.Namespace) -> int:
     recommend_date = parse_date(args.recommend_date)
     recommend_time = normalize_time(args.recommend_time)
     recommend_price = normalize_price(args.recommend_price)
+    take_profit_date = parse_date(args.take_profit_date) if args.take_profit_date else ""
+    take_profit_time = normalize_time(args.take_profit_time)
+    take_profit_price = normalize_price(args.take_profit_price)
+    if take_profit_date and not take_profit_time and not take_profit_price:
+        raise ValueError("填写 --take-profit-date 但不填写 --take-profit-price 时，必须填写 --take-profit-time 用于自动抓价")
+    if take_profit_time and not take_profit_date:
+        raise ValueError("填写 --take-profit-time 时必须填写 --take-profit-date")
+    if take_profit_price and not take_profit_date:
+        raise ValueError("填写 --take-profit-price 时必须填写 --take-profit-date")
+    if take_profit_date and take_profit_date < recommend_date:
+        raise ValueError("--take-profit-date 不能早于 --recommend-date")
     recommendation_id = generate_id(rows, symbol, recommend_date)
 
     rows.append(
@@ -207,6 +245,9 @@ def cmd_add(args: argparse.Namespace) -> int:
             recommend_date=recommend_date,
             recommend_time=recommend_time,
             recommend_price=recommend_price,
+            take_profit_date=take_profit_date,
+            take_profit_time=take_profit_time,
+            take_profit_price=take_profit_price,
             note=(args.note or "").strip(),
         )
     )
@@ -238,12 +279,29 @@ def cmd_update(args: argparse.Namespace) -> int:
         raise ValueError("--recommend-time 和 --clear-recommend-time 不能同时使用")
     if args.clear_recommend_price and args.recommend_price:
         raise ValueError("--recommend-price 和 --clear-recommend-price 不能同时使用")
+    if args.clear_take_profit and (args.take_profit_date or args.take_profit_time or args.take_profit_price):
+        raise ValueError("--clear-take-profit 不能和止盈字段同时使用")
 
     new_symbol = parse_symbol(args.code) if args.code else target.symbol
     new_tag = normalize_tag(args.tag) if args.tag else target.tag
     new_date = parse_date(args.recommend_date) if args.recommend_date else target.recommend_date
     new_time = "" if args.clear_recommend_time else normalize_time(args.recommend_time) if args.recommend_time else target.recommend_time
     new_price = "" if args.clear_recommend_price else normalize_price(args.recommend_price) if args.recommend_price else target.recommend_price
+    new_take_profit_date = ""
+    new_take_profit_time = ""
+    new_take_profit_price = ""
+    if not args.clear_take_profit:
+        new_take_profit_date = parse_date(args.take_profit_date) if args.take_profit_date else target.take_profit_date
+        new_take_profit_time = normalize_time(args.take_profit_time) if args.take_profit_time else target.take_profit_time
+        new_take_profit_price = normalize_price(args.take_profit_price) if args.take_profit_price else target.take_profit_price
+        if new_take_profit_date and not new_take_profit_time and not new_take_profit_price:
+            raise ValueError("填写止盈日期但不填写止盈价格时，必须填写止盈时间用于自动抓价")
+        if new_take_profit_time and not new_take_profit_date:
+            raise ValueError("填写止盈时间时必须填写止盈日期")
+        if new_take_profit_price and not new_take_profit_date:
+            raise ValueError("填写止盈价格时必须填写止盈日期")
+        if new_take_profit_date and new_take_profit_date < new_date:
+            raise ValueError("止盈日期不能早于推荐日期")
 
     target.symbol = new_symbol
     target.tag = new_tag
@@ -251,6 +309,9 @@ def cmd_update(args: argparse.Namespace) -> int:
     target.recommend_date = new_date
     target.recommend_time = new_time
     target.recommend_price = new_price
+    target.take_profit_date = new_take_profit_date
+    target.take_profit_time = new_take_profit_time
+    target.take_profit_price = new_take_profit_price
     target.note = args.note.strip() if args.note is not None else target.note
 
     if args.regenerate_id:
@@ -450,8 +511,30 @@ def render_row_detail(row: RecommendationRow) -> str:
         f"推荐日期={row.recommend_date}\n"
         f"推荐时间={row.recommend_time or '-'}\n"
         f"推荐价格={row.recommend_price or '-'}\n"
+        f"止盈日期={row.take_profit_date or '-'}\n"
+        f"止盈时间={row.take_profit_time or '-'}\n"
+        f"止盈价格={row.take_profit_price or '-'}\n"
         f"备注={row.note or '-'}"
     )
+
+
+def prompt_take_profit(default_date: str = "", default_time: str = "", default_price: str = "") -> tuple[str, str, str]:
+    if not prompt_yes_no("是否设置止盈点", bool(default_price)):
+        return "", "", ""
+
+    if default_date:
+        initial_date = dt.date.fromisoformat(default_date)
+    else:
+        initial_date = dt.date.today()
+    take_profit_date = prompt_date_with_arrows("选择止盈日期", initial_date)
+    take_profit_time = prompt_recommend_time(default_time)
+    take_profit_price = prompt_recommend_price(default_price)
+    if not take_profit_time and not take_profit_price:
+        print("未填写止盈价格时必须填写止盈时间，后续刷新会按该时刻自动抓价。")
+        take_profit_time = prompt_recommend_time(default_time)
+    if not take_profit_time and not take_profit_price:
+        raise ValueError("止盈点缺少止盈时间或止盈价格")
+    return take_profit_date, take_profit_time, take_profit_price
 
 
 def wizard_add(csv_path: Path) -> None:
@@ -463,6 +546,9 @@ def wizard_add(csv_path: Path) -> None:
     recommend_date = prompt_date_with_arrows("选择推荐日期", dt.date.today())
     recommend_time = prompt_recommend_time()
     recommend_price = prompt_recommend_price()
+    take_profit_date, take_profit_time, take_profit_price = prompt_take_profit()
+    if take_profit_date and take_profit_date < recommend_date:
+        raise ValueError("止盈日期不能早于推荐日期")
     note = prompt_note("首次推荐")
     recommendation_id = generate_id(rows, symbol, recommend_date)
     new_row = RecommendationRow(
@@ -473,6 +559,9 @@ def wizard_add(csv_path: Path) -> None:
         recommend_date=recommend_date,
         recommend_time=recommend_time,
         recommend_price=recommend_price,
+        take_profit_date=take_profit_date,
+        take_profit_time=take_profit_time,
+        take_profit_price=take_profit_price,
         note=note,
     )
 
@@ -549,6 +638,8 @@ def wizard_update(csv_path: Path) -> None:
             ("推荐日期", "date"),
             ("推荐时间", "time"),
             ("推荐价格", "price"),
+            ("止盈点", "take_profit"),
+            ("清空止盈点", "clear_take_profit"),
             ("备注", "note"),
             ("重新生成 ID", "id"),
             ("返回", "back"),
@@ -569,6 +660,18 @@ def wizard_update(csv_path: Path) -> None:
         target.recommend_time = prompt_recommend_time(target.recommend_time)
     elif field == "price":
         target.recommend_price = prompt_recommend_price(target.recommend_price)
+    elif field == "take_profit":
+        (
+            target.take_profit_date,
+            target.take_profit_time,
+            target.take_profit_price,
+        ) = prompt_take_profit(target.take_profit_date, target.take_profit_time, target.take_profit_price)
+        if target.take_profit_date and target.take_profit_date < target.recommend_date:
+            raise ValueError("止盈日期不能早于推荐日期")
+    elif field == "clear_take_profit":
+        target.take_profit_date = ""
+        target.take_profit_time = ""
+        target.take_profit_price = ""
     elif field == "note":
         target.note = prompt_note(target.note)
     elif field == "id":
@@ -670,6 +773,9 @@ def build_parser() -> argparse.ArgumentParser:
     add_parser.add_argument("--recommend-date", required=True, help="Recommend date in YYYY-MM-DD")
     add_parser.add_argument("--recommend-time", help="Recommend time in HH:MM; script will try 1-minute quote price")
     add_parser.add_argument("--recommend-price", help="Manual recommend price; useful for historical minute quote fallback")
+    add_parser.add_argument("--take-profit-date", help="Take-profit date in YYYY-MM-DD")
+    add_parser.add_argument("--take-profit-time", help="Take-profit time in HH:MM")
+    add_parser.add_argument("--take-profit-price", help="Optional manual take-profit price")
     add_parser.add_argument("--note", default="", help="Optional note")
     add_parser.add_argument("--refresh", action="store_true", help="Run scripts/update_data.py after writing CSV")
     add_parser.set_defaults(func=cmd_add)
@@ -687,8 +793,12 @@ def build_parser() -> argparse.ArgumentParser:
     update_parser.add_argument("--recommend-date", help="New date in YYYY-MM-DD")
     update_parser.add_argument("--recommend-time", help="New time in HH:MM")
     update_parser.add_argument("--recommend-price", help="New manual recommend price")
+    update_parser.add_argument("--take-profit-date", help="New take-profit date in YYYY-MM-DD")
+    update_parser.add_argument("--take-profit-time", help="New take-profit time in HH:MM")
+    update_parser.add_argument("--take-profit-price", help="New optional manual take-profit price")
     update_parser.add_argument("--clear-recommend-time", action="store_true", help="Clear recommend_time")
     update_parser.add_argument("--clear-recommend-price", action="store_true", help="Clear recommend_price")
+    update_parser.add_argument("--clear-take-profit", action="store_true", help="Clear take-profit fields")
     update_parser.add_argument("--note", help="New note")
     update_parser.add_argument("--new-id", help="Set a custom id explicitly")
     update_parser.add_argument(

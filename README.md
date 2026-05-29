@@ -31,6 +31,7 @@ python3 scripts/manage_recommendations.py wizard
 ```bash
 python3 scripts/manage_recommendations.py add --tag 标签A --code 600519 --name 贵州茅台 --recommend-date 2026-05-25 --recommend-time 10:23 --note 首次推荐 --refresh
 python3 scripts/manage_recommendations.py add --tag 标签A --code 600519 --name 贵州茅台 --recommend-date 2026-05-25 --recommend-time 10:23 --recommend-price 1288.5 --note 历史补录 --refresh
+python3 scripts/manage_recommendations.py update --id 20260525-600519-1 --take-profit-date 2026-05-28 --take-profit-time 10:30 --take-profit-price 1388 --refresh
 python3 scripts/manage_recommendations.py list
 python3 scripts/manage_recommendations.py update --id 20260525-600519-1 --tag 标签B --recommend-time 10:23 --recommend-price 1288.5 --note 二次观察 --refresh
 python3 scripts/manage_recommendations.py remove --id 20260525-600519-1 --refresh
@@ -42,19 +43,20 @@ python3 scripts/manage_recommendations.py remove --id 20260525-600519-1 --refres
 - `--tag` 可选，标签名称；不填时归到 `默认`
 - `--recommend-time` 可选，格式是 `HH:MM`，系统会尝试使用 1 分钟行情作为推荐价
 - `--recommend-price` 可选，用于历史补录或分钟行情不可回查时手工指定推荐价
+- `--take-profit-date` / `--take-profit-time` / `--take-profit-price` 可选，用于记录止盈点；可以手填止盈价，也可以只填止盈日期和时间让刷新脚本自动抓取分钟价
 - `--refresh` 会顺手执行一次 `scripts/update_data.py`
 - 工具会自动生成 `id`，你不需要手工维护
-- 向导里修改推荐时间或推荐价格时，输入 `-` 可以清空原值
+- 向导里修改推荐时间、推荐价格或止盈字段时，输入 `-` 可以清空原值
 
 ## 数据文件
 
 推荐记录存放在 `docs/data/recommendations.csv`，字段如下：
 
 ```csv
-id,tag,symbol,name,recommend_date,recommend_time,recommend_price,note
-20260506-301666-1,默认,301666,大普微,2026-05-06,,,empty
-20260521-688820-1,标签A,688820,盛合晶微,2026-05-21,10:23,,empty
-20260525-603986-1,标签B,603986,兆易创新,2026-05-24,10:23,1288.5,二次推荐
+id,tag,symbol,name,recommend_date,recommend_time,recommend_price,take_profit_date,take_profit_time,take_profit_price,note
+20260506-301666-1,默认,301666,大普微,2026-05-06,,,,,,empty
+20260521-688820-1,标签A,688820,盛合晶微,2026-05-21,10:23,,,,,empty
+20260525-603986-1,标签B,603986,兆易创新,2026-05-24,10:23,1288.5,2026-05-28,10:30,1388,二次推荐
 ```
 
 字段说明：
@@ -66,6 +68,9 @@ id,tag,symbol,name,recommend_date,recommend_time,recommend_price,note
 - `recommend_date`：你记录的推荐日期，格式必须是 `YYYY-MM-DD`
 - `recommend_time`：可选，推荐时刻，格式为 `HH:MM`
 - `recommend_price`：可选，推荐时刻股价；填写后优先使用该价格，不再依赖分钟行情回查
+- `take_profit_date`：可选，止盈日期，格式为 `YYYY-MM-DD`
+- `take_profit_time`：可选，止盈时刻，格式为 `HH:MM`
+- `take_profit_price`：可选，止盈价格；不填但填写了止盈日期和时间时，刷新脚本会尝试自动抓取该时刻分钟价
 - `note`：可选备注
 
 补充规则：
@@ -86,7 +91,7 @@ id,tag,symbol,name,recommend_date,recommend_time,recommend_price,note
 
 - 推荐日建仓价
 - 推荐时刻股价与价格来源
-- 当前价与当前收益率
+- 当前价 / 止盈价与当前收益率 / 止盈收益率
 - 5 日收益
 - 10 日收益
 - 20 日收益
@@ -104,6 +109,7 @@ id,tag,symbol,name,recommend_date,recommend_time,recommend_price,note
 - 如果没有填写推荐时间，推荐价沿用推荐日收盘价；如果推荐日不是交易日，会显示成 `MM-DD(顺延)收盘`
 - 如果填写了推荐时间，推荐价会优先使用 1 分钟行情，页面只显示时间，例如 `09:32`
 - 如果填写了 `recommend_price`，页面会显示 `09:32(手填)`；如果走日线收盘价，页面会显示 `MM-DD收盘`
+- 如果填写了止盈点，页面会显示止盈标记；止盈价可以手填，也可以由 `take_profit_date + take_profit_time` 自动抓取。当前收益、summary、散点图以及止盈之后的 5/10/20 日收益都按止盈价计算
 
 ## 异常和兜底
 
@@ -185,9 +191,9 @@ python3 -m http.server 8000 --directory docs
 ## 指标口径
 
 - 推荐价：优先使用手工 `recommend_price`；否则若有 `recommend_time`，使用推荐时刻之后第一条 1 分钟行情价格；否则使用推荐日当天收盘价，若当天不是交易日则顺延到下一个交易日
-- 当前价：最新一个可用交易日收盘价
-- 收益率：`当前价 / 建仓价 - 1`
-- 5 日 / 10 日 / 20 日收益：推荐后第 5 / 10 / 20 个交易日相对建仓价的收益
-- 最大涨幅：推荐后区间最高价相对建仓价的涨幅
-- 最大回撤：推荐后按收盘价序列计算的区间最大回撤
+- 当前价：未止盈时为最新一个可用交易日收盘价；已止盈时为止盈价。止盈价优先使用手工 `take_profit_price`，否则尝试使用止盈时刻之后第一条 1 分钟行情价格
+- 收益率：`当前价或止盈价 / 建仓价 - 1`
+- 5 日 / 10 日 / 20 日收益：推荐后第 5 / 10 / 20 个交易日相对建仓价的收益；如果该窗口落在止盈日之后，则按止盈价固定
+- 最大涨幅：未止盈时按推荐后区间最高价计算；已止盈时只计算持有区间到止盈日，并纳入止盈价
+- 最大回撤：未止盈时按推荐后收盘价序列计算；已止盈时只计算持有区间到止盈日，并纳入止盈价
 - 是否盈利：当前收益率是否大于 0

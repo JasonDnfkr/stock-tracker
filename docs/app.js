@@ -140,22 +140,35 @@ function entryPriceTitle(record) {
   return parts.length ? parts.join(" · ") : "";
 }
 
-function renderMetricWithPrice(rate, price) {
+function metricPriceSourceLabel(source) {
+  if (source === "take_profit") {
+    return "止盈";
+  }
+  return "";
+}
+
+function renderMetricWithPrice(rate, price, source = "") {
   const toneClass = metricClass(rate);
+  const sourceLabel = metricPriceSourceLabel(source);
   return `
     <div class="price-cell">
       <span class="${toneClass}">${formatSignedPercent(rate)}</span>
-      ${price === null || price === undefined ? "" : `<span class="cell-note ${toneClass}">${formatNumber(price)}</span>`}
+      ${
+        price === null || price === undefined
+          ? ""
+          : `<span class="cell-note ${toneClass}">${formatNumber(price)}${sourceLabel ? ` · ${sourceLabel}` : ""}</span>`
+      }
     </div>
   `;
 }
 
-function renderPriceWithMetric(price, rate) {
+function renderPriceWithMetric(price, rate, source = "") {
   const toneClass = metricClass(rate);
+  const sourceLabel = metricPriceSourceLabel(source);
   return `
     <div class="price-cell">
       <span class="price-main ${toneClass}">${formatNumber(price)}</span>
-      <span class="cell-note ${toneClass}">${formatSignedPercent(rate)}</span>
+      <span class="cell-note ${toneClass}">${formatSignedPercent(rate)}${sourceLabel ? ` · ${sourceLabel}` : ""}</span>
     </div>
   `;
 }
@@ -264,6 +277,26 @@ function renderTagBadge(record) {
   return shouldShowInlineTag() ? `<span class="tag-badge">${escapeHtml(recordTag(record))}</span>` : "";
 }
 
+function takeProfitLabel(record) {
+  if (!record.is_take_profit) {
+    return "";
+  }
+
+  const sourceLabel = entryPriceSourceLabel(record.take_profit_price_source);
+  const parts = [
+    "止盈",
+    record.take_profit_date ? formatShortDate(record.take_profit_date) : "",
+    record.take_profit_time || "",
+    record.take_profit_price === null || record.take_profit_price === undefined ? "" : formatNumber(record.take_profit_price),
+    sourceLabel ? `(${sourceLabel})` : "",
+  ];
+  return parts.filter(Boolean).join(" ");
+}
+
+function renderTakeProfitBadge(record) {
+  return record.is_take_profit ? `<span class="take-profit-badge">止盈</span>` : "";
+}
+
 function renderRecommendationSubline(record, showSequenceHint = false) {
   const parts = [record.recommend_date];
   if (shouldShowInlineTag()) {
@@ -271,6 +304,10 @@ function renderRecommendationSubline(record, showSequenceHint = false) {
   }
   if (showSequenceHint) {
     parts.push(`第 ${record.recommendation_sequence} 次`);
+  }
+  const profitLabel = takeProfitLabel(record);
+  if (profitLabel) {
+    parts.push(escapeHtml(profitLabel));
   }
   return parts.filter(Boolean).join(" · ");
 }
@@ -801,6 +838,11 @@ function renderTimelineChart(records) {
                   data-entry-price="${escapeHtml(formatNumber(record.entry_price))}"
                   data-entry-time="${escapeHtml(record.entry_time || "")}"
                   data-entry-price-source="${escapeHtml(entryPriceSourceLabel(record.entry_price_source))}"
+                  data-is-take-profit="${record.is_take_profit ? "true" : "false"}"
+                  data-take-profit-date="${escapeHtml(record.take_profit_date || "")}"
+                  data-take-profit-time="${escapeHtml(record.take_profit_time || "")}"
+                  data-take-profit-price="${escapeHtml(formatNumber(record.take_profit_price))}"
+                  data-take-profit-price-source="${escapeHtml(entryPriceSourceLabel(record.take_profit_price_source))}"
                   data-return-rate="${escapeHtml(tooltipMetricText(record.return_rate))}"
                   data-return-rate-value="${record.return_rate}"
                   data-return-five-day="${escapeHtml(tooltipMetricText(record.return_5d))}"
@@ -934,6 +976,11 @@ function renderChartTooltip(target) {
     entryPrice = "--",
     entryTime = "",
     entryPriceSource = "",
+    isTakeProfit = "false",
+    takeProfitDate = "",
+    takeProfitTime = "",
+    takeProfitPrice = "--",
+    takeProfitPriceSource = "",
     returnRate = "--",
     returnFiveDay = "--",
     returnTenDay = "--",
@@ -959,7 +1006,12 @@ function renderChartTooltip(target) {
     <div class="chart-tooltip-row"><span>标签</span><strong>${escapeHtml(tag)}</strong></div>
     <div class="chart-tooltip-row"><span>推荐时间</span><strong>${escapeHtml([recommendDate, recommendTime].filter(Boolean).join(" ") || "--")}</strong></div>
     <div class="chart-tooltip-row"><span>推荐价</span><strong>${escapeHtml(entryPrice)}${entryTime || recommendTime || entryPriceSource ? ` (${escapeHtml([entryTime || recommendTime, entryPriceSource].filter(Boolean).join(" · "))})` : ""}</strong></div>
-    <div class="chart-tooltip-row"><span>当前收益</span><strong class="${tooltipMetricClass(parsedReturnRate)}">${escapeHtml(returnRate)}</strong></div>
+    ${
+      isTakeProfit === "true"
+        ? `<div class="chart-tooltip-row"><span>止盈点</span><strong>${escapeHtml([takeProfitDate, takeProfitTime].filter(Boolean).join(" ") || "--")} · ${escapeHtml(takeProfitPrice)}${takeProfitPriceSource ? ` (${escapeHtml(takeProfitPriceSource)})` : ""}</strong></div>`
+        : ""
+    }
+    <div class="chart-tooltip-row"><span>${isTakeProfit === "true" ? "止盈收益" : "当前收益"}</span><strong class="${tooltipMetricClass(parsedReturnRate)}">${escapeHtml(returnRate)}</strong></div>
     <div class="chart-tooltip-row"><span>5日收益</span><strong class="${tooltipMetricClass(parsedReturn5d)}">${escapeHtml(returnFiveDay)}</strong></div>
     <div class="chart-tooltip-row"><span>10日收益</span><strong class="${tooltipMetricClass(parsedReturn10d)}">${escapeHtml(returnTenDay)}</strong></div>
     <div class="chart-tooltip-row"><span>20日收益</span><strong class="${tooltipMetricClass(parsedReturn20d)}">${escapeHtml(returnTwentyDay)}</strong></div>
@@ -1056,6 +1108,7 @@ function renderGroupedView(records) {
                   <span class="stock-symbol">${record.symbol}</span>
                   <span class="stock-name" title="事件 ID：${record.id}">${record.name || "--"}</span>
                   ${renderTagBadge(record)}
+                  ${renderTakeProfitBadge(record)}
                   ${
                     group.recommendation_count > 1
                       ? `
@@ -1092,6 +1145,7 @@ function renderGroupedView(records) {
                         <span class="stock-symbol">${record.symbol}</span>
                         <span class="stock-name">${record.name || "--"}</span>
                         ${renderTagBadge(record)}
+                        ${renderTakeProfitBadge(record)}
                         ${
                           group.recommendation_count > 1
                             ? `
@@ -1118,10 +1172,10 @@ function renderGroupedView(records) {
               <td>
                 ${renderEntryPrice(record)}
               </td>
-              <td>${renderPriceWithMetric(record.current_price, record.return_rate)}</td>
-              <td>${renderMetricWithPrice(record.return_5d, record.return_5d_price)}</td>
-              <td>${renderMetricWithPrice(record.return_10d, record.return_10d_price)}</td>
-              <td>${renderMetricWithPrice(record.return_20d, record.return_20d_price)}</td>
+              <td>${renderPriceWithMetric(record.current_price, record.return_rate, record.current_price_source)}</td>
+              <td>${renderMetricWithPrice(record.return_5d, record.return_5d_price, record.return_5d_price_source)}</td>
+              <td>${renderMetricWithPrice(record.return_10d, record.return_10d_price, record.return_10d_price_source)}</td>
+              <td>${renderMetricWithPrice(record.return_20d, record.return_20d_price, record.return_20d_price_source)}</td>
               <td>${renderMetricWithPrice(record.max_gain, record.max_gain_price)}</td>
               <td>${renderMetricWithPrice(record.max_drawdown, record.max_drawdown_price)}</td>
               <td><span class="pill ${profitClass}">${profitLabel}</span></td>
@@ -1162,17 +1216,18 @@ function renderTable(records) {
                     : ""
                 }
                 ${renderTagBadge(record)}
+                ${renderTakeProfitBadge(record)}
               </div>
-              <span class="stock-subline">${record.recommend_date}</span>
+              <span class="stock-subline">${renderRecommendationSubline(record)}</span>
             </div>
           </td>
           <td>
             ${renderEntryPrice(record)}
           </td>
-          <td>${renderPriceWithMetric(record.current_price, record.return_rate)}</td>
-          <td>${renderMetricWithPrice(record.return_5d, record.return_5d_price)}</td>
-          <td>${renderMetricWithPrice(record.return_10d, record.return_10d_price)}</td>
-          <td>${renderMetricWithPrice(record.return_20d, record.return_20d_price)}</td>
+          <td>${renderPriceWithMetric(record.current_price, record.return_rate, record.current_price_source)}</td>
+          <td>${renderMetricWithPrice(record.return_5d, record.return_5d_price, record.return_5d_price_source)}</td>
+          <td>${renderMetricWithPrice(record.return_10d, record.return_10d_price, record.return_10d_price_source)}</td>
+          <td>${renderMetricWithPrice(record.return_20d, record.return_20d_price, record.return_20d_price_source)}</td>
           <td>${renderMetricWithPrice(record.max_gain, record.max_gain_price)}</td>
           <td>${renderMetricWithPrice(record.max_drawdown, record.max_drawdown_price)}</td>
           <td><span class="pill ${profitClass}">${profitLabel}</span></td>

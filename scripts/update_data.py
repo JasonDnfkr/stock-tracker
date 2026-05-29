@@ -44,6 +44,9 @@ class Recommendation:
     recommend_date: dt.date
     recommend_time: dt.time | None
     recommend_price: float | None
+    take_profit_date: dt.date | None
+    take_profit_time: dt.time | None
+    take_profit_price: float | None
     note: str
 
 
@@ -134,6 +137,17 @@ def parse_recommend_price(raw_price: str) -> float | None:
   return price
 
 
+def parse_optional_date(raw_date: str, field_name: str) -> dt.date | None:
+  value = raw_date.strip()
+  if not value:
+    return None
+
+  try:
+    return dt.date.fromisoformat(value)
+  except ValueError as exc:
+    raise ValueError(f"{field_name} 必须是 YYYY-MM-DD") from exc
+
+
 def read_recommendations(csv_path: Path) -> tuple[list[Recommendation], list[dict]]:
   recommendations: list[Recommendation] = []
   failures: list[dict] = []
@@ -149,9 +163,23 @@ def read_recommendations(csv_path: Path) -> tuple[list[Recommendation], list[dic
       recommend_date = (row.get("recommend_date") or "").strip()
       raw_recommend_time = (row.get("recommend_time") or "").strip()
       raw_recommend_price = (row.get("recommend_price") or "").strip()
+      raw_take_profit_date = (row.get("take_profit_date") or "").strip()
+      raw_take_profit_time = (row.get("take_profit_time") or "").strip()
+      raw_take_profit_price = (row.get("take_profit_price") or "").strip()
       note = (row.get("note") or "").strip()
 
-      if not any([raw_id, symbol, name, recommend_date, raw_recommend_time, raw_recommend_price, note]):
+      if not any([
+        raw_id,
+        symbol,
+        name,
+        recommend_date,
+        raw_recommend_time,
+        raw_recommend_price,
+        raw_take_profit_date,
+        raw_take_profit_time,
+        raw_take_profit_price,
+        note,
+      ]):
         continue
 
       if not symbol:
@@ -228,6 +256,96 @@ def read_recommendations(csv_path: Path) -> tuple[list[Recommendation], list[dic
         continue
 
       try:
+        parsed_take_profit_date = parse_optional_date(raw_take_profit_date, "take_profit_date")
+      except ValueError as exc:
+        failures.append(
+          {
+            "id": raw_id or generate_recommendation_id(symbol, recommend_date, row_number),
+            "tag": tag,
+            "symbol": symbol,
+            "name": name,
+            "recommend_date": recommend_date,
+            "recommend_time": raw_recommend_time,
+            "error": f"CSV 第 {row_number} 行止盈日期格式错误：{exc}",
+          }
+        )
+        continue
+
+      try:
+        parsed_take_profit_time = parse_recommend_time(raw_take_profit_time)
+      except ValueError as exc:
+        failures.append(
+          {
+            "id": raw_id or generate_recommendation_id(symbol, recommend_date, row_number),
+            "tag": tag,
+            "symbol": symbol,
+            "name": name,
+            "recommend_date": recommend_date,
+            "recommend_time": raw_recommend_time,
+            "error": f"CSV 第 {row_number} 行止盈时间格式错误：{exc}",
+          }
+        )
+        continue
+
+      try:
+        parsed_take_profit_price = parse_recommend_price(raw_take_profit_price)
+      except ValueError as exc:
+        failures.append(
+          {
+            "id": raw_id or generate_recommendation_id(symbol, recommend_date, row_number),
+            "tag": tag,
+            "symbol": symbol,
+            "name": name,
+            "recommend_date": recommend_date,
+            "recommend_time": raw_recommend_time,
+            "error": f"CSV 第 {row_number} 行止盈价格格式错误：{exc}",
+          }
+        )
+        continue
+
+      if parsed_take_profit_time is not None and parsed_take_profit_date is None:
+        failures.append(
+          {
+            "id": raw_id or generate_recommendation_id(symbol, recommend_date, row_number),
+            "tag": tag,
+            "symbol": symbol,
+            "name": name,
+            "recommend_date": recommend_date,
+            "recommend_time": raw_recommend_time,
+            "error": f"CSV 第 {row_number} 行填写 take_profit_time 时必须填写 take_profit_date",
+          }
+        )
+        continue
+
+      if parsed_take_profit_price is not None and parsed_take_profit_date is None:
+        failures.append(
+          {
+            "id": raw_id or generate_recommendation_id(symbol, recommend_date, row_number),
+            "tag": tag,
+            "symbol": symbol,
+            "name": name,
+            "recommend_date": recommend_date,
+            "recommend_time": raw_recommend_time,
+            "error": f"CSV 第 {row_number} 行填写 take_profit_price 时必须填写 take_profit_date",
+          }
+        )
+        continue
+
+      if parsed_take_profit_date is not None and parsed_take_profit_date < parsed_date:
+        failures.append(
+          {
+            "id": raw_id or generate_recommendation_id(symbol, recommend_date, row_number),
+            "tag": tag,
+            "symbol": symbol,
+            "name": name,
+            "recommend_date": recommend_date,
+            "recommend_time": raw_recommend_time,
+            "error": f"CSV 第 {row_number} 行 take_profit_date 不能早于 recommend_date",
+          }
+        )
+        continue
+
+      try:
         query_symbol = validate_symbol(symbol)
       except ValueError as exc:
         failures.append(
@@ -282,6 +400,9 @@ def read_recommendations(csv_path: Path) -> tuple[list[Recommendation], list[dic
           recommend_date=parsed_date,
           recommend_time=parsed_time,
           recommend_price=parsed_price,
+          take_profit_date=parsed_take_profit_date,
+          take_profit_time=parsed_take_profit_time,
+          take_profit_price=parsed_take_profit_price,
           note=note,
         )
       )
@@ -471,6 +592,29 @@ def calculate_max_drawdown(closes: list[float]) -> tuple[float | None, float | N
   return max_drawdown, trough_price
 
 
+def last_index_on_or_before(bars: list[dict], target_date: dt.date) -> int | None:
+  matched_index = None
+  for idx, bar in enumerate(bars):
+    if bar["date"] <= target_date:
+      matched_index = idx
+    else:
+      break
+  return matched_index
+
+
+def target_return_bar(
+  bars: list[dict],
+  target_index: int,
+  take_profit_index: int | None,
+  take_profit_price: float | None,
+) -> tuple[float | None, str | None]:
+  if target_index >= len(bars):
+    return None, None
+  if take_profit_index is not None and take_profit_price is not None and target_index >= take_profit_index:
+    return take_profit_price, "take_profit"
+  return float(bars[target_index]["close"]), "daily_close"
+
+
 def resolve_entry_price(rec: Recommendation, entry_bar: dict, minute_bars: list[dict] | None) -> tuple[float, str | None, str]:
   if rec.recommend_price is not None:
     return rec.recommend_price, rec.recommend_time.strftime("%H:%M") if rec.recommend_time else None, "manual"
@@ -488,27 +632,82 @@ def resolve_entry_price(rec: Recommendation, entry_bar: dict, minute_bars: list[
   return float(entry_bar["close"]), None, "daily_close"
 
 
-def compute_record(rec: Recommendation, bars: list[dict], minute_bars: list[dict] | None = None) -> dict:
+def resolve_take_profit_price(rec: Recommendation, minute_bars: list[dict] | None) -> tuple[float | None, str | None, str | None]:
+  if rec.take_profit_price is not None:
+    return rec.take_profit_price, rec.take_profit_time.strftime("%H:%M") if rec.take_profit_time else None, "manual"
+
+  if rec.take_profit_date is None:
+    return None, None, None
+
+  if rec.take_profit_time is None:
+    raise RuntimeError("缺少 take_profit_time，无法自动计算止盈时刻股价")
+
+  if minute_bars is None:
+    raise RuntimeError("缺少止盈分钟行情，无法计算止盈时刻股价")
+
+  minute_bar = first_minute_on_or_after(minute_bars, rec.take_profit_date, rec.take_profit_time)
+  if minute_bar is None:
+    raise RuntimeError("止盈时间之后暂无可用 1 分钟行情；历史记录可手工填写 take_profit_price 兜底")
+
+  return float(minute_bar["price"]), minute_bar["time"].strftime("%H:%M"), "minute_1m"
+
+
+def compute_record(
+  rec: Recommendation,
+  bars: list[dict],
+  recommend_minute_bars: list[dict] | None = None,
+  take_profit_minute_bars: list[dict] | None = None,
+) -> dict:
   entry_index = first_index_on_or_after(bars, rec.recommend_date)
   if entry_index is None:
     raise PendingTrackingError("推荐日期之后暂无可用交易数据，等待下一个交易日")
 
   entry_bar = bars[entry_index]
-  entry_price, entry_time, entry_price_source = resolve_entry_price(rec, entry_bar, minute_bars)
-  current_bar = bars[-1]
-  current_price = float(current_bar["close"])
+  entry_price, entry_time, entry_price_source = resolve_entry_price(rec, entry_bar, recommend_minute_bars)
+  take_profit_price, take_profit_time, take_profit_price_source = resolve_take_profit_price(rec, take_profit_minute_bars)
+  market_current_bar = bars[-1]
+  market_current_price = float(market_current_bar["close"])
+  has_take_profit = take_profit_price is not None
+  take_profit_index = None
+  if has_take_profit and rec.take_profit_date is not None:
+    if rec.take_profit_date > market_current_bar["date"]:
+      raise PendingTrackingError("止盈日期之后暂无可用交易数据，等待行情更新")
+    take_profit_index = last_index_on_or_before(bars, rec.take_profit_date)
+    if take_profit_index is None or take_profit_index < entry_index:
+      raise PendingTrackingError("止盈日期尚无可用交易数据，等待行情更新")
 
-  closes_since_entry = [float(bar["close"]) for bar in bars[entry_index:]]
-  highs_since_entry = [float(bar["high"]) for bar in bars[entry_index:] if bar["high"] is not None]
+  current_bar = bars[take_profit_index] if take_profit_index is not None else market_current_bar
+  current_price = float(take_profit_price) if take_profit_price is not None else market_current_price
+  current_price_source = "take_profit" if has_take_profit else "daily_close"
 
-  bar_5d = bars[entry_index + 5] if entry_index + 5 < len(bars) else None
-  bar_10d = bars[entry_index + 10] if entry_index + 10 < len(bars) else None
-  bar_20d = bars[entry_index + 20] if entry_index + 20 < len(bars) else None
+  holding_end_index = take_profit_index if take_profit_index is not None else len(bars) - 1
+  holding_bars = bars[entry_index:holding_end_index + 1]
+  closes_since_entry = [float(bar["close"]) for bar in holding_bars]
+  highs_since_entry = [float(bar["high"]) for bar in holding_bars if bar["high"] is not None]
+  if has_take_profit and take_profit_price is not None:
+    closes_since_entry.append(float(take_profit_price))
+    highs_since_entry.append(float(take_profit_price))
+
+  return_5d_price, return_5d_source = target_return_bar(
+    bars,
+    entry_index + 5,
+    take_profit_index,
+    take_profit_price,
+  )
+  return_10d_price, return_10d_source = target_return_bar(
+    bars,
+    entry_index + 10,
+    take_profit_index,
+    take_profit_price,
+  )
+  return_20d_price, return_20d_source = target_return_bar(
+    bars,
+    entry_index + 20,
+    take_profit_index,
+    take_profit_price,
+  )
 
   return_rate = current_price / entry_price - 1
-  return_5d_price = float(bar_5d["close"]) if bar_5d else None
-  return_10d_price = float(bar_10d["close"]) if bar_10d else None
-  return_20d_price = float(bar_20d["close"]) if bar_20d else None
   return_5d = (return_5d_price / entry_price - 1) if return_5d_price is not None else None
   return_10d = (return_10d_price / entry_price - 1) if return_10d_price is not None else None
   return_20d = (return_20d_price / entry_price - 1) if return_20d_price is not None else None
@@ -530,19 +729,31 @@ def compute_record(rec: Recommendation, bars: list[dict], minute_bars: list[dict
     "entry_price": round(entry_price, 4),
     "entry_price_source": entry_price_source,
     "current_price": round(current_price, 4),
+    "current_price_source": current_price_source,
+    "market_current_price": round(market_current_price, 4),
+    "market_current_date": market_current_bar["date"].isoformat(),
     "return_rate": round(return_rate, 6),
     "return_5d": round(return_5d, 6) if return_5d is not None else None,
     "return_5d_price": round(return_5d_price, 4) if return_5d_price is not None else None,
+    "return_5d_price_source": return_5d_source,
     "return_10d": round(return_10d, 6) if return_10d is not None else None,
     "return_10d_price": round(return_10d_price, 4) if return_10d_price is not None else None,
+    "return_10d_price_source": return_10d_source,
     "return_20d": round(return_20d, 6) if return_20d is not None else None,
     "return_20d_price": round(return_20d_price, 4) if return_20d_price is not None else None,
+    "return_20d_price_source": return_20d_source,
     "max_gain": round(max_gain, 6) if max_gain is not None else None,
     "max_gain_price": round(max_gain_price, 4) if max_gain_price is not None else None,
     "max_drawdown": round(max_drawdown, 6) if max_drawdown is not None else None,
     "max_drawdown_price": round(max_drawdown_price, 4) if max_drawdown_price is not None else None,
     "is_profitable": return_rate > 0,
     "current_date": current_bar["date"].isoformat(),
+    "is_take_profit": has_take_profit,
+    "take_profit_date": rec.take_profit_date.isoformat() if rec.take_profit_date else None,
+    "take_profit_time": take_profit_time or (rec.take_profit_time.strftime("%H:%M") if rec.take_profit_time else None),
+    "take_profit_price": round(take_profit_price, 4) if take_profit_price is not None else None,
+    "take_profit_price_source": take_profit_price_source,
+    "take_profit_return": round(return_rate, 6) if has_take_profit else None,
   }
 
 
@@ -650,6 +861,9 @@ def append_pending_record(pending_records: list[dict], rec: Recommendation, mess
       "name": rec.name,
       "recommend_date": rec.recommend_date.isoformat(),
       "recommend_time": rec.recommend_time.strftime("%H:%M") if rec.recommend_time else None,
+      "take_profit_date": rec.take_profit_date.isoformat() if rec.take_profit_date else None,
+      "take_profit_time": rec.take_profit_time.strftime("%H:%M") if rec.take_profit_time else None,
+      "take_profit_price": rec.take_profit_price,
       "status": "pending_tracking",
       "message": message,
     }
@@ -666,6 +880,9 @@ def append_failure(failures: list[dict], rec: Recommendation, error: Exception |
       "name": rec.name,
       "recommend_date": rec.recommend_date.isoformat(),
       "recommend_time": rec.recommend_time.strftime("%H:%M") if rec.recommend_time else None,
+      "take_profit_date": rec.take_profit_date.isoformat() if rec.take_profit_date else None,
+      "take_profit_time": rec.take_profit_time.strftime("%H:%M") if rec.take_profit_time else None,
+      "take_profit_price": rec.take_profit_price,
       "error": str(error),
     }
   )
@@ -716,6 +933,12 @@ def fetch_minute_bars_for_records(recommendations: list[Recommendation], today: 
     (rec.query_symbol, rec.recommend_date)
     for rec in recommendations
     if rec.recommend_time is not None and rec.recommend_price is None
+  } | {
+    (rec.query_symbol, rec.take_profit_date)
+    for rec in recommendations
+    if rec.take_profit_date is not None
+    and rec.take_profit_time is not None
+    and rec.take_profit_price is None
   })
 
   minute_bars_cache: dict[tuple[str, dt.date], list[dict]] = {}
@@ -779,14 +1002,21 @@ def main() -> int:
       if not bars:
         raise RuntimeError("No market data returned")
 
-      minute_bars = None
+      recommend_minute_bars = None
       if rec.recommend_time is not None and rec.recommend_price is None:
         minute_cache_key = (rec.query_symbol, rec.recommend_date)
         if minute_cache_key in minute_errors:
           raise minute_errors[minute_cache_key]
-        minute_bars = minute_bars_cache.get(minute_cache_key)
+        recommend_minute_bars = minute_bars_cache.get(minute_cache_key)
 
-      records.append(compute_record(rec, bars, minute_bars))
+      take_profit_minute_bars = None
+      if rec.take_profit_date is not None and rec.take_profit_time is not None and rec.take_profit_price is None:
+        minute_cache_key = (rec.query_symbol, rec.take_profit_date)
+        if minute_cache_key in minute_errors:
+          raise minute_errors[minute_cache_key]
+        take_profit_minute_bars = minute_bars_cache.get(minute_cache_key)
+
+      records.append(compute_record(rec, bars, recommend_minute_bars, take_profit_minute_bars))
     except PendingTrackingError as exc:
       append_pending_record(pending_records, rec, str(exc))
     except Exception as exc:

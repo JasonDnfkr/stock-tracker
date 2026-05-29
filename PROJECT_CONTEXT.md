@@ -45,6 +45,7 @@
 - “待跟踪”与“失败记录”分流展示
 - 本地管理工具 `scripts/manage_recommendations.py`
 - 推荐时刻 `recommend_time` 与推荐价 `recommend_price`
+- 止盈点 `take_profit_date` / `take_profit_time` / `take_profit_price`
 - 标签 `tag` 分类筛选
 - `5日 / 10日 / 20日收益`
 - `最大涨幅 / 最大回撤`
@@ -90,6 +91,7 @@
 - 散点图已支持 `近10日 / 近20日 / 近60日 / 全部` 时间范围切换，默认 `近20日`
 - 录入股票时支持填写 `recommend_time`，刷新时会尝试用 1 分钟行情计算推荐时刻股价
 - 历史记录支持填写 `recommend_price` 作为分钟行情无法回查时的手工兜底价
+- 支持给推荐记录填写止盈点；止盈价可手填，也可由止盈日期+时间自动抓取分钟价。拿到止盈价后，当前收益、summary、散点图以及止盈之后的窗口收益按止盈价固定
 - 页面展示规则：自动分钟价显示为 `09:32`，手工价显示为 `09:32(手填)`，日线价显示为 `MM-DD收盘` 或 `MM-DD(顺延)收盘`
 - 当前已添加深科技 `000021`，推荐时间为 `2026-05-27 09:32`，生成价来源为 `minute_1m`
 - 支持按标签筛选视图；同一股票在不同标签下是不同展示分组和不同 summary 样本
@@ -516,7 +518,7 @@ tradeoff：
 - 股票列已经和推荐日期合并
 - grouped view 中只有展开后、且该股票存在多次推荐时，才显示 `第 N 次`
 - grouped view 的后续行使用 `.group-follow-row { opacity: 0.75; }`
-- “当前价”列实际是“当前价 + 收益率”
+- “当前/止盈价”列实际是“价格 + 收益率”；有止盈点时显示止盈价和止盈收益率
 - `5日 / 10日 / 20日 / 最大涨幅 / 最大回撤` 都是“百分比 + 第二行对应价格”
 - summary panel 内置散点图，不要再额外渲染独立图表 panel
 - 散点图默认标签尽量全显，但冲突时按优先级隐藏
@@ -566,7 +568,7 @@ tradeoff：
 
 关键字段：
 
-- `id,tag,symbol,name,recommend_date,recommend_time,recommend_price,note`
+- `id,tag,symbol,name,recommend_date,recommend_time,recommend_price,take_profit_date,take_profit_time,take_profit_price,note`
 
 ### `docs/data/metrics.json`
 
@@ -583,6 +585,7 @@ tradeoff：
 - 规范化/校验 A 股与港股代码
 - 调用腾讯行情接口拉取 A 股 / 港股前复权日线
 - 推荐时间存在且没有手工价格时，尝试拉取 1 分钟行情
+- 止盈日期和止盈时间存在且没有手工止盈价时，尝试拉取 1 分钟行情
 - 计算收益相关指标
 - 输出 `metrics.json`
 - 对重复推荐的同一 `query_symbol` 做抓价缓存，避免重复请求
@@ -628,7 +631,7 @@ tradeoff：
 
 关键数据结构：
 
-- `CSV_FIELDS = ["id", "tag", "symbol", "name", "recommend_date", "recommend_time", "recommend_price", "note"]`
+- `CSV_FIELDS = ["id", "tag", "symbol", "name", "recommend_date", "recommend_time", "recommend_price", "take_profit_date", "take_profit_time", "take_profit_price", "note"]`
 - `@dataclass class RecommendationRow`
 
 关键函数签名：
@@ -694,7 +697,7 @@ CLI contract：
 表头固定为：
 
 ```csv
-id,tag,symbol,name,recommend_date,recommend_time,recommend_price,note
+id,tag,symbol,name,recommend_date,recommend_time,recommend_price,take_profit_date,take_profit_time,take_profit_price,note
 ```
 
 字段含义：
@@ -706,6 +709,9 @@ id,tag,symbol,name,recommend_date,recommend_time,recommend_price,note
 - `recommend_date`：推荐日期，要求 `YYYY-MM-DD`
 - `recommend_time`：可选，推荐时刻，要求 `HH:MM` 或 `HH:MM:SS`
 - `recommend_price`：可选，推荐时刻股价；填写后优先作为建仓价
+- `take_profit_date`：可选，止盈日期，要求 `YYYY-MM-DD`
+- `take_profit_time`：可选，止盈时刻，要求 `HH:MM` 或 `HH:MM:SS`
+- `take_profit_price`：可选，止盈价；为空但填写了 `take_profit_date + take_profit_time` 时会尝试自动抓取分钟价；拿到止盈价后后续收益统计按止盈价固定
 - `note`：备注
 
 输入约束：
@@ -716,6 +722,7 @@ id,tag,symbol,name,recommend_date,recommend_time,recommend_price,note
 - `symbol` 也可以写港股裸代码或 `.HK`
 - 空行允许存在，会被忽略
 - 免费腾讯分钟接口不能保证任意历史日期回查；历史精确价格应使用 `recommend_price` 兜底
+- 止盈点价格优先使用手工录入；如果只填止盈日期和时间，会尝试自动回查分钟价，失败时进入 failures 并提示手工补 `take_profit_price`
 
 ## `metrics.json` contract
 
@@ -769,19 +776,31 @@ id,tag,symbol,name,recommend_date,recommend_time,recommend_price,note
 - `entry_price: number`
 - `entry_price_source: "manual" | "minute_1m" | "daily_close"`
 - `current_price: number`
+- `current_price_source: "daily_close" | "take_profit"`
+- `market_current_price: number`
+- `market_current_date: string`
 - `return_rate: number`
 - `return_5d: number | null`
 - `return_5d_price: number | null`
+- `return_5d_price_source: "daily_close" | "take_profit" | null`
 - `return_10d: number | null`
 - `return_10d_price: number | null`
+- `return_10d_price_source: "daily_close" | "take_profit" | null`
 - `return_20d: number | null`
 - `return_20d_price: number | null`
+- `return_20d_price_source: "daily_close" | "take_profit" | null`
 - `max_gain: number | null`
 - `max_gain_price: number | null`
 - `max_drawdown: number | null`
 - `max_drawdown_price: number | null`
 - `is_profitable: boolean`
 - `current_date: string`
+- `is_take_profit: boolean`
+- `take_profit_date: string | null`
+- `take_profit_time: string | null`
+- `take_profit_price: number | null`
+- `take_profit_price_source: "manual" | "minute_1m" | null`
+- `take_profit_return: number | null`
 - `recommendation_sequence: number`
 - `recommendation_count_for_symbol: number`
 
@@ -790,6 +809,11 @@ id,tag,symbol,name,recommend_date,recommend_time,recommend_price,note
 - `entry_date`：实际建仓对应的交易日；若推荐日不是交易日，会顺延
 - `entry_time`：实际使用的分钟行情时间；手工价且填写了推荐时间时等于推荐时间
 - `entry_price_source`：`manual` 为手工价，`minute_1m` 为 1 分钟行情价，`daily_close` 为日收盘价
+- `current_price`：未止盈时为最新日线收盘价；已止盈时为止盈价
+- `current_price_source`：已止盈时为 `take_profit`
+- `market_current_price` / `market_current_date`：保留真实最新市场价格和日期
+- `take_profit_return`：止盈价相对建仓价收益率；无止盈点时为 `null`
+- `take_profit_price_source`：`manual` 为手工止盈价，`minute_1m` 为自动分钟行情止盈价
 - summary、分组视图和推荐次数序号都按 `tag + symbol` 作为分组单位，不能跨标签合并
 - `query_symbol`：内部统一标准代码；A 股如 `600584.SS`，港股如 `0700.HK`
 - `recommendation_sequence`：该股票按时间排序后的第几次推荐
