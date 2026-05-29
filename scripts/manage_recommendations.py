@@ -7,6 +7,8 @@ import csv
 import datetime as dt
 import subprocess
 import sys
+import termios
+import tty
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -16,6 +18,7 @@ from update_data import normalize_symbol, normalize_tag, parse_recommend_price, 
 CSV_FIELDS = ["id", "tag", "symbol", "name", "recommend_date", "recommend_time", "recommend_price", "note"]
 DEFAULT_CSV_PATH = Path("docs/data/recommendations.csv")
 DEFAULT_METRICS_SCRIPT = Path("scripts/update_data.py")
+WEEKDAY_NAMES = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
 
 
 @dataclass
@@ -266,6 +269,379 @@ def cmd_update(args: argparse.Namespace) -> int:
     return 0
 
 
+def weekday_label(date_value: dt.date) -> str:
+    return WEEKDAY_NAMES[date_value.weekday()]
+
+
+def format_date_label(date_value: dt.date) -> str:
+    return f"{date_value.isoformat()} {weekday_label(date_value)}"
+
+
+def prompt_text(prompt: str, default: str = "", allow_empty: bool = True) -> str:
+    suffix = f" [{default}]" if default else ""
+    while True:
+        value = input(f"{prompt}{suffix}: ").strip()
+        if value:
+            return value
+        if default:
+            return default
+        if allow_empty:
+            return ""
+        print("不能为空，请重新输入。")
+
+
+def prompt_yes_no(prompt: str, default: bool = True) -> bool:
+    marker = "Y/n" if default else "y/N"
+    while True:
+        value = input(f"{prompt} ({marker}): ").strip().lower()
+        if not value:
+            return default
+        if value in ("y", "yes"):
+            return True
+        if value in ("n", "no"):
+            return False
+        print("请输入 y 或 n。")
+
+
+def prompt_choice(title: str, options: list[tuple[str, object]]) -> object:
+    if not options:
+        raise ValueError("没有可选项")
+
+    while True:
+        print(f"\n{title}")
+        for index, (label, _) in enumerate(options, start=1):
+            print(f"{index}. {label}")
+
+        value = input("请选择编号: ").strip()
+        if value.isdigit():
+            index = int(value)
+            if 1 <= index <= len(options):
+                return options[index - 1][1]
+        print("选择无效，请重新输入。")
+
+
+def read_arrow_key() -> str:
+    ch = sys.stdin.read(1)
+    if ch in ("\r", "\n"):
+        return "enter"
+    if ch.lower() == "m":
+        return "manual"
+    if ch.lower() == "q":
+        return "quit"
+    if ch == "\x03":
+        raise KeyboardInterrupt
+    if ch == "\x1b":
+        seq = sys.stdin.read(2)
+        if seq == "[D":
+            return "left"
+        if seq == "[C":
+            return "right"
+    return ""
+
+
+def prompt_date_with_arrows(prompt: str, default_date: dt.date | None = None) -> str:
+    selected = default_date or dt.date.today()
+    if not sys.stdin.isatty():
+        return parse_date(prompt_text(prompt, selected.isoformat(), allow_empty=False))
+
+    print(f"\n{prompt}")
+    print("按 ← 前一天，按 → 后一天，Enter 确认，m 手动输入，q 取消。")
+    old_settings = termios.tcgetattr(sys.stdin)
+    try:
+        tty.setraw(sys.stdin.fileno())
+        while True:
+            sys.stdout.write(f"\r当前选择：{format_date_label(selected)}   ")
+            sys.stdout.flush()
+            key = read_arrow_key()
+            if key == "left":
+                selected -= dt.timedelta(days=1)
+            elif key == "right":
+                selected += dt.timedelta(days=1)
+            elif key == "enter":
+                sys.stdout.write("\n")
+                return selected.isoformat()
+            elif key == "manual":
+                sys.stdout.write("\n")
+                break
+            elif key == "quit":
+                sys.stdout.write("\n")
+                raise ValueError("已取消日期选择")
+    finally:
+        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+
+    return parse_date(prompt_text(prompt, selected.isoformat(), allow_empty=False))
+
+
+def known_tags(rows: list[RecommendationRow]) -> list[str]:
+    tags = sorted({row.tag for row in rows if row.tag}, key=lambda item: item)
+    return tags or ["默认"]
+
+
+def prompt_tag(rows: list[RecommendationRow], default: str = "默认") -> str:
+    tags = known_tags(rows)
+    options: list[tuple[str, object]] = [(tag, tag) for tag in tags]
+    options.append(("新建标签", "__new__"))
+    selected = prompt_choice("选择标签", options)
+    if selected == "__new__":
+        return normalize_tag(prompt_text("新标签", default, allow_empty=False))
+    return normalize_tag(str(selected))
+
+
+def prompt_symbol() -> str:
+    while True:
+        try:
+            return parse_symbol(prompt_text("股票代码", allow_empty=False))
+        except ValueError as exc:
+            print(f"代码无效：{exc}")
+
+
+def latest_name_for_symbol(rows: list[RecommendationRow], symbol: str) -> str:
+    matches = [row for row in rows if row.symbol.upper() == symbol.upper() and row.name]
+    if not matches:
+        return ""
+    matches.sort(key=lambda row: (row.recommend_date, row.id), reverse=True)
+    return matches[0].name
+
+
+def prompt_recommend_time(default: str = "") -> str:
+    while True:
+        raw_value = prompt_text("推荐时间，直接回车表示不填，输入 - 清空", default)
+        if raw_value == "-":
+            return ""
+        try:
+            return normalize_time(raw_value)
+        except ValueError as exc:
+            print(f"时间无效：{exc}")
+
+
+def prompt_recommend_price(default: str = "") -> str:
+    while True:
+        raw_value = prompt_text("推荐价格，直接回车表示不填，输入 - 清空", default)
+        if raw_value == "-":
+            return ""
+        try:
+            return normalize_price(raw_value)
+        except ValueError as exc:
+            print(f"价格无效：{exc}")
+
+
+def prompt_note(default: str = "") -> str:
+    selected = prompt_choice(
+        "选择备注",
+        [
+            ("首次推荐", "首次推荐"),
+            ("早盘推荐", "早盘推荐"),
+            ("二次推荐", "二次推荐"),
+            ("手动输入", "__manual__"),
+            ("留空", ""),
+        ],
+    )
+    if selected == "__manual__":
+        return prompt_text("备注", default)
+    return str(selected)
+
+
+def render_row_detail(row: RecommendationRow) -> str:
+    return (
+        f"id={row.id}\n"
+        f"标签={row.tag}\n"
+        f"代码={row.symbol}\n"
+        f"名称={row.name}\n"
+        f"推荐日期={row.recommend_date}\n"
+        f"推荐时间={row.recommend_time or '-'}\n"
+        f"推荐价格={row.recommend_price or '-'}\n"
+        f"备注={row.note or '-'}"
+    )
+
+
+def wizard_add(csv_path: Path) -> None:
+    rows = read_rows(csv_path)
+    tag = prompt_tag(rows)
+    symbol = prompt_symbol()
+    inferred_name = latest_name_for_symbol(rows, symbol)
+    name = prompt_text("股票名称", inferred_name, allow_empty=False)
+    recommend_date = prompt_date_with_arrows("选择推荐日期", dt.date.today())
+    recommend_time = prompt_recommend_time()
+    recommend_price = prompt_recommend_price()
+    note = prompt_note("首次推荐")
+    recommendation_id = generate_id(rows, symbol, recommend_date)
+    new_row = RecommendationRow(
+        id=recommendation_id,
+        tag=tag,
+        symbol=symbol,
+        name=name,
+        recommend_date=recommend_date,
+        recommend_time=recommend_time,
+        recommend_price=recommend_price,
+        note=note,
+    )
+
+    print("\n即将新增：")
+    print(render_row_detail(new_row))
+    if not prompt_yes_no("确认写入", True):
+        print("已取消新增。")
+        return
+
+    rows.append(new_row)
+    write_rows(csv_path, rows)
+    print(f"已新增推荐记录: {new_row.id}")
+    if prompt_yes_no("是否立即刷新 metrics.json", True):
+        maybe_refresh_metrics(True)
+
+
+def recent_rows(rows: list[RecommendationRow], limit: int = 20) -> list[RecommendationRow]:
+    return sorted(rows, key=lambda row: (row.recommend_date, row.id), reverse=True)[:limit]
+
+
+def prompt_row(rows: list[RecommendationRow]) -> RecommendationRow | None:
+    if not rows:
+        print("没有推荐记录。")
+        return None
+
+    mode = prompt_choice(
+        "查找记录",
+        [
+            ("按股票代码", "code"),
+            ("按标签", "tag"),
+            ("最近记录", "recent"),
+            ("返回", "back"),
+        ],
+    )
+    if mode == "back":
+        return None
+    if mode == "code":
+        symbol = prompt_symbol()
+        candidates = [row for row in rows if row.symbol.upper() == symbol.upper()]
+    elif mode == "tag":
+        tag = prompt_tag(rows)
+        candidates = [row for row in rows if row.tag == tag]
+    else:
+        candidates = recent_rows(rows)
+
+    candidates = sorted(candidates, key=lambda row: (row.recommend_date, row.id), reverse=True)
+    if not candidates:
+        print("没有匹配记录。")
+        return None
+
+    options = [
+        (f"{row.id} {row.tag} {row.symbol} {row.name} {row.recommend_date} {row.recommend_time or '-'}", row)
+        for row in candidates[:30]
+    ]
+    options.append(("返回", None))
+    selected = prompt_choice("选择记录", options)
+    return selected if isinstance(selected, RecommendationRow) else None
+
+
+def wizard_update(csv_path: Path) -> None:
+    rows = read_rows(csv_path)
+    target = prompt_row(rows)
+    if target is None:
+        return
+
+    print("\n当前记录：")
+    print(render_row_detail(target))
+    field = prompt_choice(
+        "选择修改项",
+        [
+            ("标签", "tag"),
+            ("股票代码", "symbol"),
+            ("股票名称", "name"),
+            ("推荐日期", "date"),
+            ("推荐时间", "time"),
+            ("推荐价格", "price"),
+            ("备注", "note"),
+            ("重新生成 ID", "id"),
+            ("返回", "back"),
+        ],
+    )
+    if field == "back":
+        return
+
+    if field == "tag":
+        target.tag = prompt_tag(rows, target.tag)
+    elif field == "symbol":
+        target.symbol = prompt_symbol()
+    elif field == "name":
+        target.name = prompt_text("股票名称", target.name, allow_empty=False)
+    elif field == "date":
+        target.recommend_date = prompt_date_with_arrows("选择推荐日期", dt.date.fromisoformat(target.recommend_date))
+    elif field == "time":
+        target.recommend_time = prompt_recommend_time(target.recommend_time)
+    elif field == "price":
+        target.recommend_price = prompt_recommend_price(target.recommend_price)
+    elif field == "note":
+        target.note = prompt_note(target.note)
+    elif field == "id":
+        rows_without_target = [row for row in rows if row.id != target.id]
+        target.id = generate_id(rows_without_target, target.symbol, target.recommend_date)
+
+    if sum(1 for row in rows if row.id == target.id) > 1:
+        raise ValueError(f"更新后 id 重复: {target.id}")
+
+    print("\n更新后记录：")
+    print(render_row_detail(target))
+    if not prompt_yes_no("确认写入", True):
+        print("已取消修改。")
+        return
+
+    write_rows(csv_path, rows)
+    print(f"已更新推荐记录: {target.id}")
+    if prompt_yes_no("是否立即刷新 metrics.json", True):
+        maybe_refresh_metrics(True)
+
+
+def wizard_view(csv_path: Path) -> None:
+    rows = read_rows(csv_path)
+    mode = prompt_choice(
+        "查看记录",
+        [
+            ("全部", "all"),
+            ("按标签", "tag"),
+            ("按股票代码", "code"),
+            ("最近 20 条", "recent"),
+            ("返回", "back"),
+        ],
+    )
+    if mode == "back":
+        return
+    if mode == "tag":
+        tag = prompt_tag(rows)
+        rows = [row for row in rows if row.tag == tag]
+    elif mode == "code":
+        symbol = prompt_symbol()
+        rows = [row for row in rows if row.symbol.upper() == symbol.upper()]
+    elif mode == "recent":
+        rows = recent_rows(rows)
+    print()
+    print(render_table(rows))
+
+
+def cmd_wizard(args: argparse.Namespace) -> int:
+    csv_path = Path(args.csv)
+    print("推荐记录交互向导")
+    while True:
+        action = prompt_choice(
+            "请选择操作",
+            [
+                ("新增推荐记录", "add"),
+                ("修改已有记录", "update"),
+                ("查看记录", "view"),
+                ("刷新 metrics.json", "refresh"),
+                ("退出", "exit"),
+            ],
+        )
+        if action == "add":
+            wizard_add(csv_path)
+        elif action == "update":
+            wizard_update(csv_path)
+        elif action == "view":
+            wizard_view(csv_path)
+        elif action == "refresh":
+            maybe_refresh_metrics(True)
+        elif action == "exit":
+            return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Manage recommendations.csv without editing ids by hand.")
     parser.add_argument(
@@ -322,6 +698,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     update_parser.add_argument("--refresh", action="store_true", help="Run scripts/update_data.py after writing CSV")
     update_parser.set_defaults(func=cmd_update)
+
+    wizard_parser = subparsers.add_parser("wizard", help="Open an interactive recommendation manager")
+    wizard_parser.set_defaults(func=cmd_wizard)
 
     return parser
 

@@ -623,6 +623,8 @@ tradeoff：
 - 本地 CRUD `recommendations.csv`
 - 自动生成/重建推荐事件 `id`
 - 可选执行 `--refresh`
+- 提供 `wizard` 交互向导，支持新增、修改、查看和刷新
+- `wizard` 中推荐日期支持方向键选择：`←` 前一天，`→` 后一天，并显示星期几；非 TTY 环境回退为普通输入
 
 关键数据结构：
 
@@ -641,6 +643,11 @@ tradeoff：
 - `find_row(rows: list[RecommendationRow], recommendation_id: str) -> RecommendationRow`
 - `render_table(rows: list[RecommendationRow]) -> str`
 - `maybe_refresh_metrics(should_refresh: bool) -> None`
+- `prompt_date_with_arrows(prompt: str, default_date: dt.date | None = None) -> str`
+- `wizard_add(csv_path: Path) -> None`
+- `wizard_update(csv_path: Path) -> None`
+- `wizard_view(csv_path: Path) -> None`
+- `cmd_wizard(args: argparse.Namespace) -> int`
 - `cmd_list(args: argparse.Namespace) -> int`
 - `cmd_add(args: argparse.Namespace) -> int`
 - `cmd_remove(args: argparse.Namespace) -> int`
@@ -651,6 +658,7 @@ tradeoff：
 CLI contract：
 
 - `list --code`
+- `wizard`
 - `add --code --name [--tag] --recommend-date [--recommend-time] [--recommend-price] [--note] [--refresh]`
 - `remove --id [--refresh]`
 - `update --id [--code] [--tag] [--name] [--recommend-date] [--recommend-time] [--recommend-price] [--clear-recommend-time] [--clear-recommend-price] [--note] [--new-id] [--regenerate-id] [--refresh]`
@@ -908,6 +916,7 @@ python3 scripts/update_data.py --max-workers 4
 本地录入工具：
 
 ```bash
+python3 scripts/manage_recommendations.py wizard
 python3 scripts/manage_recommendations.py list
 python3 scripts/manage_recommendations.py add --tag 标签A --code 600519 --name 贵州茅台 --recommend-date 2026-05-25 --recommend-time 10:23 --note 首次推荐 --refresh
 python3 scripts/manage_recommendations.py update --id 20260525-600519-1 --recommend-time 10:23 --recommend-price 1288.5 --refresh

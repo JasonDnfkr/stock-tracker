@@ -18,7 +18,15 @@
 3. 提交并推送到 GitHub
 4. 等待 GitHub Actions 自动更新线上页面
 
-最省事的录入方式不是手改 CSV，而是用本地命令行工具：
+最省事的录入方式不是手改 CSV，而是打开交互向导：
+
+```bash
+python3 scripts/manage_recommendations.py wizard
+```
+
+向导支持新增、修改、查看和刷新数据。新增或修改推荐日期时，交互式终端里可以用方向键选日期：`←` 前一天，`→` 后一天，界面会同时显示星期几；按 `Enter` 确认。
+
+如果需要自动化或一次性命令，也可以继续使用普通子命令：
 
 ```bash
 python3 scripts/manage_recommendations.py add --tag 标签A --code 600519 --name 贵州茅台 --recommend-date 2026-05-25 --recommend-time 10:23 --note 首次推荐 --refresh
@@ -36,6 +44,7 @@ python3 scripts/manage_recommendations.py remove --id 20260525-600519-1 --refres
 - `--recommend-price` 可选，用于历史补录或分钟行情不可回查时手工指定推荐价
 - `--refresh` 会顺手执行一次 `scripts/update_data.py`
 - 工具会自动生成 `id`，你不需要手工维护
+- 向导里修改推荐时间或推荐价格时，输入 `-` 可以清空原值
 
 ## 数据文件
 
