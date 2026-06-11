@@ -1,9 +1,9 @@
 {
-  "generated_at": "2026-06-11 15:26:52",
+  "generated_at": "2026-06-11 17:06:40",
   "refresh_context": {
     "trigger": "schedule",
     "trigger_label": "定时触发",
-    "generated_at": "2026-06-11 15:26:52"
+    "generated_at": "2026-06-11 17:06:40"
   },
   "summary": {
     "total_picks": 29,
@@ -12,7 +12,7 @@
     "summary_basis_count": 27,
     "profitable_picks": 18,
     "win_rate": 0.666667,
-    "average_return": 0.14543,
+    "average_return": 0.146376,
     "average_return_5d": 0.110183,
     "average_return_10d": 0.138889,
     "average_return_20d": 0.224721
@@ -283,11 +283,11 @@
       "entry_time": null,
       "entry_price": 56.79,
       "entry_price_source": "daily_close",
-      "current_price": 92.25,
+      "current_price": 93.7,
       "current_price_source": "daily_close",
-      "market_current_price": 92.25,
+      "market_current_price": 93.7,
       "market_current_date": "2026-06-11",
-      "return_rate": 0.624406,
+      "return_rate": 0.649938,
       "return_5d": 0.045783,
       "return_5d_price": 59.39,
       "return_5d_price_source": "daily_close",
@@ -1413,8 +1413,8 @@
       "recommendation_count": 1,
       "profitable_count": 1,
       "win_rate": 1.0,
-      "average_return": 0.624406,
-      "latest_return": 0.624406,
+      "average_return": 0.649938,
+      "latest_return": 0.649938,
       "first_recommend_date": "2026-05-22",
       "latest_recommend_date": "2026-05-22"
     },
